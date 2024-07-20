@@ -56,8 +56,8 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
         value = local.webhookDeleteRunner
       }
       env {
-        name  = "BASE_URL"
-        value = google_cloud_run_v2_service.agent_autoscaler.uri
+        name  = "asddfdassadff"
+        value = local.webhookDeleteRunner
       }
       dynamic "env" {
         for_each = var.enable_debug ? [0] : []
