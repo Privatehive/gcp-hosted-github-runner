@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tereius/g-spot-agents-azure-pipelines/tree/master/pollAgentJobsFunc/pkg"
+	"github.com/Tereius/g-spot-runner-github-actions/tree/master/pollAgentJobsFunc/pkg"
 	"github.com/stretchr/testify/assert"
 )
 
