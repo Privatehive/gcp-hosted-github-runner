@@ -20,6 +20,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	ginlogrus "github.com/toorop/gin-logrus"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const SHA_PREFIX = "sha256="
@@ -251,11 +253,18 @@ func (s *Autoscaler) createInstanceFromTemplate(ctx context.Context, instanceNam
 
 func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, message string) (*taskspb.Task, error) {
 
+	now := timestamppb.Now()
+	now.Seconds += 60
 	// Build the Task payload.
 	// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#CreateTaskRequest
 	req := &taskspb.CreateTaskRequest{
 		Parent: s.conf.TaskQueue,
 		Task: &taskspb.Task{
+			DispatchDeadline: &durationpb.Duration{
+				Seconds: 120,
+				Nanos:   0,
+			},
+			ScheduleTime: now,
 			// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#HttpRequest
 			MessageType: &taskspb.Task_HttpRequest{
 				HttpRequest: &taskspb.HttpRequest{
@@ -281,6 +290,8 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 	createdTask, err := s.t.CreateTask(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("cloudtasks.CreateTask: %w", err)
+	} else {
+		log.Info("Created callback task")
 	}
 
 	return createdTask, nil

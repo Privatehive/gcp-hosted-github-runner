@@ -30,7 +30,7 @@ resource "google_compute_instance_template" "spot_instance" {
       network_tier = "STANDARD"
     }
   }
-
+  
   # show log: sudo journalctl -u google-startup-scripts.service
   # run again: sudo google_metadata_script_runner startup
   metadata_startup_script = <<EOT

@@ -31,7 +31,6 @@ func init() {
 }
 
 func Test(t *testing.T) {
-
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	req, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://localhost:%d/webhook", PORT), strings.NewReader("Hello, World!"))
 	req.Header.Add("x-hub-signature-256", "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17")

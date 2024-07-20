@@ -15,8 +15,4 @@ resource "google_cloud_tasks_queue" "agent_autoscaler_tasks" {
     max_concurrent_dispatches = 1
     max_dispatches_per_second = 1
   }
-
-  timeouts {
-    create = "120s"
-  }
 }
