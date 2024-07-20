@@ -1,9 +1,10 @@
-FROM --platform=$BUILDPLATFORM golang:1.21 as build
+FROM --platform=$BUILDPLATFORM golang:1.21 AS build
 
 WORKDIR /build
 COPY ./go.mod ./
 COPY ./go.sum ./
-COPY ./main.go ./
+COPY ./pkg ./pkg
+COPY main.go ./
 RUN go mod download
 
 ARG UID=11010 GID=11010
@@ -13,7 +14,7 @@ ARG TARGETOS TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -a -tags netgo,osusergo -trimpath -ldflags '-w -s -buildid= -extldflags "-static"' -o agent-scaler main.go
 
 
-FROM scratch as run
+FROM scratch AS run
 LABEL org.opencontainers.image.title="runner-autoscaler"
 LABEL org.opencontainers.image.authors="Björn Stresing <bjoern.stresing@gmx.de>"
 LABEL org.opencontainers.image.description="This image provides a webserver that listens for GitHub actions webhooks and provision compute instances if needed"

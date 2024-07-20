@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/Tereius/g-spot-runner-github-actions/tree/master/pollAgentJobsFunc/pkg"
+	"github.com/Tereius/g-spot-runner-github-actions/pkg"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -1,4 +1,4 @@
-module github.com/Tereius/g-spot-runner-github-actions/tree/master/pollAgentJobsFunc
+module github.com/Tereius/g-spot-runner-github-actions
 
 go 1.21
 
