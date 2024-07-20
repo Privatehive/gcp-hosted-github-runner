@@ -289,9 +289,8 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 func (s *Autoscaler) handleCreateRunner(ctx *gin.Context) {
 
 	log.Info("Received handleCreateRunner call")
-	if _, err := s.verifySignature(ctx); err == nil {
-		runnerName := s.conf.RunnerPrefix + "-" + randStringRunes(16)
-		if err := s.createInstanceFromTemplate(ctx, runnerName); err != nil {
+	if data, err := s.verifySignature(ctx); err == nil {
+		if err := s.createInstanceFromTemplate(ctx, string(data)); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
 			ctx.Status(http.StatusOK)
@@ -345,6 +344,9 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				} else if payload.Action == COMPLETED {
 					delteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteRunner)
 					log.Infof("About to create spot instance delete callback task with url: %s", delteUrl)
+					if _, err := s.createCallbackTaskWithToken(ctx, delteUrl, fmt.Sprint(payload.Job.Id)); err != nil {
+						log.Errorf("Can not create callback: %s", err.Error())
+					}
 				}
 				ctx.Status(http.StatusOK)
 			}
