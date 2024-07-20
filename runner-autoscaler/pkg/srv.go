@@ -289,7 +289,8 @@ func (s *Autoscaler) handleCreateRunner(ctx *gin.Context) {
 		if err := s.createInstanceFromTemplate(ctx, runnerName); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
-			if _, err := s.createCallbackTaskWithToken(ctx, "", "", ""); err != nil {
+			delteUrl := ctx.Request.URL.JoinPath("../" + s.conf.RouteDeleteRunner)
+			if _, err := s.createCallbackTaskWithToken(ctx, delteUrl.String(), runnerName); err != nil {
 				log.Errorf("Immediately delete instance \"%s\" again because callback could not be created", runnerName)
 				s.deleteInstance(context.Background(), runnerName) // Ignore timeous, make sure the spot instance gets destroyed
 				ctx.AbortWithError(http.StatusInternalServerError, err)
