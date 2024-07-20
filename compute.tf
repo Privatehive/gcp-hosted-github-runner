@@ -30,7 +30,7 @@ resource "google_compute_instance_template" "spot_instance" {
       network_tier = "STANDARD"
     }
   }
-  
+
   # show log: sudo journalctl -u google-startup-scripts.service
   # run again: sudo google_metadata_script_runner startup
   metadata_startup_script = <<EOT
@@ -48,7 +48,8 @@ pushd /home/agent
 sudo -u agent tar zxf /tmp/agent.tar.gz
 sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) --url 'https://github.com/${var.github_organization}' --token '${var.github_registration_token}' --runnergroup '${var.github_runner_group}'
 ./bin/installdependencies.sh
-./bin/runsvc.sh
+./svc.sh install agent
+./svc.sh start
 popd
 rm /tmp/agent.tar.gz
 echo "Setup finished"

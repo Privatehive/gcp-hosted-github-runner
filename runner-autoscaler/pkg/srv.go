@@ -254,7 +254,7 @@ func (s *Autoscaler) createInstanceFromTemplate(ctx context.Context, instanceNam
 func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, message string) (*taskspb.Task, error) {
 
 	now := timestamppb.Now()
-	now.Seconds += 60
+	now.Seconds += 1
 	// Build the Task payload.
 	// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#CreateTaskRequest
 	req := &taskspb.CreateTaskRequest{
