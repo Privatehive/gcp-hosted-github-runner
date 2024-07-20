@@ -349,13 +349,13 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				if payload.Action == QUEUED {
 					createUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
 					log.Infof("About to create spot instance callback task with url: %s", createUrl)
-					if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprint(payload.Job.Id)); err != nil {
+					if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%d", s.conf.RunnerPrefix, payload.Job.Id)); err != nil {
 						log.Errorf("Can not create callback: %s", err.Error())
 					}
 				} else if payload.Action == COMPLETED {
 					delteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteRunner)
 					log.Infof("About to create spot instance delete callback task with url: %s", delteUrl)
-					if _, err := s.createCallbackTaskWithToken(ctx, delteUrl, fmt.Sprint(payload.Job.Id)); err != nil {
+					if _, err := s.createCallbackTaskWithToken(ctx, delteUrl, fmt.Sprintf("%s-%d", s.conf.RunnerPrefix, payload.Job.Id)); err != nil {
 						log.Errorf("Can not create callback: %s", err.Error())
 					}
 				}
