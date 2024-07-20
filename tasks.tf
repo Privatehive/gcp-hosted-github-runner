@@ -1,5 +1,5 @@
 resource "google_cloud_tasks_queue" "agent_autoscaler_tasks" {
-  name       = "autoscaler-webhook-queue"
+  name       = "autoscaler-task-queue"
   location   = local.region
   depends_on = [google_project_service.cloudtasks_api]
 

@@ -5,10 +5,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
+	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	taskspb "cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
@@ -22,21 +24,28 @@ import (
 
 const SHA_PREFIX = "sha256="
 const SHA_HEADER = "x-hub-signature-256"
-
-type Agent struct {
-	Name string `json:"name"`
-}
-
-type Jobs struct {
-	Count int   `json:"count"`
-	Value []Job `json:"value"`
-}
+const EVENT_HEADER = "x-github-event"
 
 type Job struct {
-	FinishTime  *string `json:"finishTime"`
-	ReceiveTime *string `json:"receiveTime"`
-	Agents      []Agent `json:"matchedAgents"`
+	Id     int64    `json:"id"`
+	Name   string   `json:"name"`
+	Status string   `json:"status"`
+	Labels []string `json:"labels"`
 }
+
+type Payload struct {
+	Action Action `json:"action"`
+	Job    Job    `json:"workflow_job"`
+}
+
+type Action string
+
+const (
+	QUEUED      Action = "queued"
+	COMPLETED   Action = "completed"
+	IN_PROGRESS Action = "in_progress"
+	WAITING     Action = "waiting"
+)
 
 type State string
 
@@ -65,43 +74,29 @@ func (s State) isRunning() bool {
 	return s == PROVISIONING || s == STAGING || s == RUNNING || s == REPAIRING
 }
 
-func (j Job) belongsToAgent(name string) bool {
-
-	for _, agent := range j.Agents {
-		if agent.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func (j Job) waiting() bool {
-
-	return j.FinishTime == nil && j.ReceiveTime == nil
-}
-
-func (j Job) running() bool {
-
-	return j.FinishTime == nil && j.ReceiveTime != nil
-}
-
-func (j Job) completed() bool {
-
-	return j.FinishTime != nil
-}
-
-var computeClient = newComputeClient()
-
 type InstanceClient struct {
 	*compute.InstancesClient
 }
 
 func newComputeClient() *InstanceClient {
 
-	if client, err := compute.NewInstancesRESTClient(context.Background()); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if client, err := compute.NewInstancesRESTClient(ctx); err != nil {
 		panic(err)
 	} else {
 		return &InstanceClient{client}
+	}
+}
+
+func newTaskClient() *cloudtasks.Client {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if client, err := cloudtasks.NewClient(ctx); err != nil {
+		panic(err)
+	} else {
+		return client
 	}
 }
 
@@ -249,14 +244,7 @@ func (s *Autoscaler) createInstanceFromTemplate(ctx context.Context, instanceNam
 	return nil
 }
 
-func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, email, message string) (*taskspb.Task, error) {
-	// Create a new Cloud Tasks client instance.
-	// See https://godoc.org/cloud.google.com/go/cloudtasks/apiv2
-	client, err := cloudtasks.NewClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("NewClient: %w", err)
-	}
-	defer client.Close()
+func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, message string) (*taskspb.Task, error) {
 
 	// Build the Task payload.
 	// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#CreateTaskRequest
@@ -285,7 +273,7 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, email
 	// Add a payload message if one is present.
 	req.Task.GetHttpRequest().Body = []byte(message)
 
-	createdTask, err := client.CreateTask(ctx, req)
+	createdTask, err := s.t.CreateTask(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("cloudtasks.CreateTask: %w", err)
 	}
@@ -328,8 +316,35 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 
 	log.Info("Received webhook call")
 	if data, err := s.verifySignature(ctx); err == nil {
+		event := ctx.GetHeader(EVENT_HEADER)
+		log.Info(ctx.Request.Header)
 		log.Info(string(data))
-		ctx.Status(http.StatusOK)
+		if event == "ping" {
+			log.Info("Received ping")
+			ctx.Status(http.StatusOK)
+		} else if event == "workflow_job" {
+			payload := Payload{}
+			if err := json.Unmarshal(data, &payload); err != nil {
+				log.Errorf("Can not unmarshal payload: %s", err.Error())
+				ctx.AbortWithError(http.StatusBadRequest, err)
+			} else {
+				url := ctx.Request.URL
+				if payload.Action == QUEUED {
+					createUrl := url.JoinPath("../" + s.conf.RouteCreateRunner)
+					log.Infof("About to create spot instance callback task with url: %s", createUrl)
+					if _, err := s.createCallbackTaskWithToken(ctx, createUrl.String(), fmt.Sprint(payload.Job.Id)); err != nil {
+						log.Errorf("Can not create callback: %s", err.Error())
+					}
+				} else if payload.Action == COMPLETED {
+					delteUrl := url.JoinPath("../" + s.conf.RouteDeleteRunner)
+					log.Infof("About to create spot instance delete callback task with url: %s", delteUrl)
+				}
+				ctx.Status(http.StatusOK)
+			}
+		} else {
+			log.Warnf("Unknown GitHub event \"%s\" received - ignored", event)
+			ctx.Status(http.StatusOK)
+		}
 	}
 }
 
@@ -348,6 +363,7 @@ type AutoscalerConfig struct {
 type Autoscaler struct {
 	engine *gin.Engine
 	c      *InstanceClient
+	t      *cloudtasks.Client
 	conf   AutoscalerConfig
 }
 
@@ -357,6 +373,7 @@ func NewAutoscaler(config AutoscalerConfig) Autoscaler {
 	scaler := Autoscaler{
 		engine: engine,
 		c:      newComputeClient(),
+		t:      newTaskClient(),
 		conf:   config,
 	}
 	engine.Use(ginlogrus.Logger(log.WithFields(log.Fields{})))
