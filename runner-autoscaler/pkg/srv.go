@@ -78,6 +78,11 @@ type InstanceClient struct {
 	*compute.InstancesClient
 }
 
+func createCallbackUrl(ctx *gin.Context, path string) string {
+
+	return "https://" + ctx.Request.Host + path
+}
+
 func newComputeClient() *InstanceClient {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -289,8 +294,8 @@ func (s *Autoscaler) handleCreateRunner(ctx *gin.Context) {
 		if err := s.createInstanceFromTemplate(ctx, runnerName); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
-			delteUrl := ctx.Request.URL.JoinPath("../" + s.conf.RouteDeleteRunner)
-			if _, err := s.createCallbackTaskWithToken(ctx, delteUrl.String(), runnerName); err != nil {
+			delteUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
+			if _, err := s.createCallbackTaskWithToken(ctx, delteUrl, runnerName); err != nil {
 				log.Errorf("Immediately delete instance \"%s\" again because callback could not be created", runnerName)
 				s.deleteInstance(context.Background(), runnerName) // Ignore timeous, make sure the spot instance gets destroyed
 				ctx.AbortWithError(http.StatusInternalServerError, err)
@@ -329,15 +334,14 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				log.Errorf("Can not unmarshal payload: %s", err.Error())
 				ctx.AbortWithError(http.StatusBadRequest, err)
 			} else {
-				url := ctx.Request.URL
 				if payload.Action == QUEUED {
-					createUrl := url.JoinPath("../" + s.conf.RouteCreateRunner)
+					createUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
 					log.Infof("About to create spot instance callback task with url: %s", createUrl)
-					if _, err := s.createCallbackTaskWithToken(ctx, createUrl.String(), fmt.Sprint(payload.Job.Id)); err != nil {
+					if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprint(payload.Job.Id)); err != nil {
 						log.Errorf("Can not create callback: %s", err.Error())
 					}
 				} else if payload.Action == COMPLETED {
-					delteUrl := url.JoinPath("../" + s.conf.RouteDeleteRunner)
+					delteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteRunner)
 					log.Infof("About to create spot instance delete callback task with url: %s", delteUrl)
 				}
 				ctx.Status(http.StatusOK)

@@ -11,7 +11,7 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
 
   template {
     service_account                  = google_service_account.agent_autoscaler.email
-    max_instance_request_concurrency = 11
+    max_instance_request_concurrency = 10
     timeout                          = "120s"
     scaling {
       min_instance_count = 0
@@ -54,6 +54,10 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
       env {
         name  = "ROUTE_DELETE_RUNNER"
         value = local.webhookDeleteRunner
+      }
+      env {
+        name  = "BASE_URL"
+        value = google_cloud_run_v2_service.agent_autoscaler.uri
       }
       dynamic "env" {
         for_each = var.enable_debug ? [0] : []
