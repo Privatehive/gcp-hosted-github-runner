@@ -55,10 +55,6 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
         name  = "ROUTE_DELETE_RUNNER"
         value = local.webhookDeleteRunner
       }
-      env {
-        name  = "asddafsfdfasfalkjssadff"
-        value = local.webhookDeleteRunner
-      }
       dynamic "env" {
         for_each = var.enable_debug ? [0] : []
         content {

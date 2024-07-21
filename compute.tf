@@ -35,7 +35,6 @@ resource "google_compute_instance_template" "spot_instance" {
   # run again: sudo google_metadata_script_runner startup
   metadata_startup_script = <<EOT
 #!/bin/bash
-set -eo pipefail
 echo "Setup of agent '$(hostname)' started"
 apt-get update && apt-get -y install docker.io docker-buildx
 useradd -d /home/agent -u 10000 agent
@@ -46,10 +45,10 @@ mkdir -p /home/agent
 chown -R agent:agent /home/agent
 pushd /home/agent
 sudo -u agent tar zxf /tmp/agent.tar.gz
-sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) --url 'https://github.com/${var.github_organization}' --token '${var.github_registration_token}' --runnergroup '${var.github_runner_group}'
-./bin/installdependencies.sh
-./svc.sh install agent
-./svc.sh start
+sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) --url 'https://github.com/${var.github_organization}' --token '${var.github_registration_token}' --runnergroup '${var.github_runner_group}' || shutdown now
+./bin/installdependencies.sh || shutdown now
+./svc.sh install agent || shutdown now
+./svc.sh start || shutdown now
 popd
 rm /tmp/agent.tar.gz
 echo "Setup finished"
