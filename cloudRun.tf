@@ -40,6 +40,10 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
         value = var.github_runner_prefix
       }
       env {
+        name  = "RUNNER_GROUP"
+        value = var.github_runner_group
+      }
+      env {
         name  = "WEBHOOK_SECRET"
         value = random_password.auth_password.result
       }

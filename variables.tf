@@ -22,10 +22,10 @@ variable "enable_debug" {
   default     = false
 }
 
-variable "github_registration_token" {
+variable "github_pat_token" {
   type        = string
   sensitive   = true
-  description = "A Registration Token for the runner"
+  description = "A PAT to get a runner registration token for the organization https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization"
 }
 
 variable "github_organization" {

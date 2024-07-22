@@ -10,6 +10,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
@@ -29,10 +30,12 @@ const SHA_HEADER = "x-hub-signature-256"
 const EVENT_HEADER = "x-github-event"
 
 type Job struct {
-	Id     int64    `json:"id"`
-	Name   string   `json:"name"`
-	Status string   `json:"status"`
-	Labels []string `json:"labels"`
+	Id              int64    `json:"id"`
+	Name            string   `json:"name"`
+	Status          string   `json:"status"`
+	Labels          []string `json:"labels"`
+	RunnerName      string   `json:"runner_name"`
+	RunnerGroupName string   `json:"runner_group_name"`
 }
 
 type Payload struct {
@@ -273,12 +276,6 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 					Headers: map[string]string{
 						SHA_HEADER: SHA_PREFIX + calcSigHex([]byte(s.conf.WebhookSecret), []byte(message)),
 					},
-					/*
-						AuthorizationHeader: &taskspb.HttpRequest_OidcToken{
-							OidcToken: &taskspb.OidcToken{
-								ServiceAccountEmail: email,
-							},
-						},*/
 				},
 			},
 		},
@@ -348,15 +345,23 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 			} else {
 				if payload.Action == QUEUED {
 					createUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
-					log.Infof("About to create spot instance callback task with url: %s", createUrl)
-					if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%d", s.conf.RunnerPrefix, payload.Job.Id)); err != nil {
+					log.Infof("About to create new instance callback task with url: %s", createUrl)
+					if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, randStringRunes(10))); err != nil {
 						log.Errorf("Can not create callback: %s", err.Error())
 					}
 				} else if payload.Action == COMPLETED {
-					delteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteRunner)
-					log.Infof("About to create spot instance delete callback task with url: %s", delteUrl)
-					if _, err := s.createCallbackTaskWithToken(ctx, delteUrl, fmt.Sprintf("%s-%d", s.conf.RunnerPrefix, payload.Job.Id)); err != nil {
-						log.Errorf("Can not create callback: %s", err.Error())
+					if payload.Job.RunnerGroupName == s.conf.RunnerGroup {
+						if strings.HasPrefix(payload.Job.RunnerName, s.conf.RunnerPrefix) {
+							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteRunner)
+							log.Infof("About to create delete callback task with url: %s", deleteUrl)
+							if _, err := s.createCallbackTaskWithToken(ctx, deleteUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, payload.Job.RunnerName)); err != nil {
+								log.Errorf("Can not create callback: %s", err.Error())
+							}
+						} else {
+							log.Warnf("Webhook requested to stop a runner that does not start with the expected runner prefix (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerPrefix, payload.Job.RunnerName)
+						}
+					} else {
+						log.Warnf("Webhook requested to stop a runner that does not belong to the expected runner group (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerGroup, payload.Job.RunnerGroupName)
 					}
 				}
 				ctx.Status(http.StatusOK)
@@ -378,6 +383,7 @@ type AutoscalerConfig struct {
 	TaskQueue           string
 	InstanceTemplateUrl string
 	RunnerPrefix        string
+	RunnerGroup         string
 }
 
 type Autoscaler struct {

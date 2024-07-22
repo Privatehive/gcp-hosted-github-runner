@@ -38,6 +38,7 @@ func main() {
 		TaskQueue:           mustGetEnv("TASK_QUEUE"),
 		InstanceTemplateUrl: mustGetEnv("INSTANCE_TEMPLATE_URL"),
 		RunnerPrefix:        getEnvDefault("RUNNER_PREFIX", "runner"),
+		RunnerGroup:         getEnvDefault("RUNNER_GROUP", "Default"),
 	})
 	scaler.Srv(8080)
 }
