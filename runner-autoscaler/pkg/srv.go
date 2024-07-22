@@ -354,7 +354,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 						if strings.HasPrefix(payload.Job.RunnerName, s.conf.RunnerPrefix) {
 							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteRunner)
 							log.Infof("About to create delete callback task with url: %s", deleteUrl)
-							if _, err := s.createCallbackTaskWithToken(ctx, deleteUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, payload.Job.RunnerName)); err != nil {
+							if _, err := s.createCallbackTaskWithToken(ctx, deleteUrl, payload.Job.RunnerName); err != nil {
 								log.Errorf("Can not create callback: %s", err.Error())
 							}
 						} else {
