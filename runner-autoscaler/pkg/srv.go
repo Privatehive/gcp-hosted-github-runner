@@ -43,6 +43,16 @@ type Payload struct {
 	Job    Job    `json:"workflow_job"`
 }
 
+func (j Job) hasLabel(label string) bool {
+
+	for _, l := range j.Labels {
+		if l == label {
+			return true
+		}
+	}
+	return false
+}
+
 type Action string
 
 const (
@@ -344,10 +354,14 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				ctx.AbortWithError(http.StatusBadRequest, err)
 			} else {
 				if payload.Action == QUEUED {
-					createUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
-					log.Infof("About to create new instance callback task with url: %s", createUrl)
-					if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, randStringRunes(10))); err != nil {
-						log.Errorf("Can not create callback: %s", err.Error())
+					if payload.Job.hasLabel("self-hosted") {
+						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
+						log.Infof("About to create new instance callback task with url: %s", createUrl)
+						if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, randStringRunes(10))); err != nil {
+							log.Errorf("Can not create callback: %s", err.Error())
+						}
+					} else {
+						log.Info("Webhook requested to start a runner that is not self-hosted - ignoring")
 					}
 				} else if payload.Action == COMPLETED {
 					if payload.Job.RunnerGroupName == s.conf.RunnerGroup {
