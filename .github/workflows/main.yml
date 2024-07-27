@@ -25,7 +25,10 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: runner-autoscaler
+          platforms: linux/amd64
+          push: true
+          sbom: false
+          provenance: false
           tags: |
             ghcr.io/privatehive/runner-autoscaler:latest
             ghcr.io/privatehive/runner-autoscaler:${{ github.ref_name }}
-          push: true
