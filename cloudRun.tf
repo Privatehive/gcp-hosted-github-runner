@@ -1,4 +1,4 @@
-resource "random_password" "auth_password" {
+resource "random_password" "webhook_secret" {
   length  = 16
   special = true
 }
@@ -45,7 +45,7 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
       }
       env {
         name  = "WEBHOOK_SECRET"
-        value = random_password.auth_password.result
+        value = random_password.webhook_secret.result
       }
       env {
         name  = "ROUTE_WEBHOOK"

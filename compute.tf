@@ -15,10 +15,10 @@ resource "google_compute_instance_template" "spot_instance" {
   }
 
   disk {
-    auto_delete = true
-    boot = true
+    auto_delete  = true
+    boot         = true
     source_image = var.spot_machine_image
-    disk_type = "pd-standard"
+    disk_type    = "pd-standard"
     disk_size_gb = 30
   }
 
@@ -26,8 +26,11 @@ resource "google_compute_instance_template" "spot_instance" {
     network    = google_compute_network.vpc_network.name
     subnetwork = google_compute_subnetwork.subnetwork.name
 
-    access_config {
-      network_tier = "STANDARD"
+    dynamic "access_config" {
+      for_each = var.use_cloud_nat ? [] : [0]
+      content {
+        network_tier = "STANDARD"
+      }
     }
   }
 

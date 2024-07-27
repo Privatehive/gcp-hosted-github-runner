@@ -8,10 +8,11 @@
 
 // Allow cloud run to pull image from container registry
 resource "google_project_iam_member" "cloud_run_member" {
-  project  = local.projectId
-  member   = "serviceAccount:service-${data.google_project.current.number}@serverless-robot-prod.iam.gserviceaccount.com"
-  for_each = toset(["roles/artifactregistry.reader"])
-  role     = each.key
+  project    = local.projectId
+  member     = "serviceAccount:service-${data.google_project.current.number}@serverless-robot-prod.iam.gserviceaccount.com"
+  for_each   = toset(["roles/artifactregistry.reader"])
+  depends_on = [google_cloud_run_v2_service.agent_autoscaler]
+  role       = each.key
 }
 
 // ---- agent-autoscaler-sa ----
@@ -55,9 +56,9 @@ resource "google_project_iam_member" "agent_autoscaler_member" {
   member  = "serviceAccount:${google_service_account.agent_autoscaler.email}"
   role    = google_project_iam_custom_role.start_stop_agent_spot.id
   condition {
-    title      = "Instance startsWith ${var.github_runner_prefix}"
+    title       = "Instance startsWith ${var.github_runner_prefix}"
     description = "Allow Start/Stop only for instances starting with a resource name of: ${var.github_runner_prefix}"
-    expression = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zone}/instances/${var.github_runner_prefix}-')"
+    expression  = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zone}/instances/${var.github_runner_prefix}-')"
   }
 }
 
@@ -77,9 +78,9 @@ resource "google_project_iam_member" "create_from_instance_template_member" {
   member  = "serviceAccount:${google_service_account.agent_autoscaler.email}"
   role    = google_project_iam_custom_role.create_from_instance_template.id
   condition {
-    title      = "Instance template: ${google_compute_instance_template.spot_instance.name}"
+    title       = "Instance template: ${google_compute_instance_template.spot_instance.name}"
     description = "Allow to create an instance from template: ${google_compute_instance_template.spot_instance.id}"
-    expression = "resource.name == '${google_compute_instance_template.spot_instance.id}'"
+    expression  = "resource.name == '${google_compute_instance_template.spot_instance.id}'"
   }
 }
 

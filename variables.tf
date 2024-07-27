@@ -16,6 +16,12 @@ variable "enable_ssh" {
   default     = false
 }
 
+variable "use_cloud_nat" {
+  type        = bool
+  description = "Use a cloud nat and router instead of a public ip address for the compute instances"
+  default     = false
+}
+
 variable "enable_debug" {
   type        = bool
   description = "Enable debug messages in agent-autoscaler (WARNING: secrets will be leaked in log files)"

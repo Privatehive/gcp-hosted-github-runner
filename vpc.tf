@@ -12,3 +12,23 @@ resource "google_compute_subnetwork" "subnetwork" {
   network                  = google_compute_network.vpc_network.name
   private_ip_google_access = true
 }
+
+resource "google_compute_router" "router" {
+  count   = var.use_cloud_nat ? 1 : 0
+  name    = "router"
+  network = google_compute_network.vpc_network.id
+}
+
+resource "google_compute_router_nat" "nat" {
+  count                              = var.use_cloud_nat ? 1 : 0
+  name                               = "router-nat"
+  router                             = google_compute_router.router[0].name
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES"
+  auto_network_tier                  = "STANDARD"
+
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
+}
