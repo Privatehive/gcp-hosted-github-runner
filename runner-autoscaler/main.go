@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/Tereius/g-spot-runner-github-actions/pkg"
 	log "github.com/sirupsen/logrus"
@@ -40,5 +41,6 @@ func main() {
 		RunnerPrefix:        getEnvDefault("RUNNER_PREFIX", "runner"),
 		RunnerGroup:         getEnvDefault("RUNNER_GROUP", "Default"),
 	})
-	scaler.Srv(8080)
+	port, _ := strconv.Atoi(getEnvDefault("PORT", "8080"))
+	scaler.Srv(port)
 }
