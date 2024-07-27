@@ -1,7 +1,5 @@
 # g-spot-runner-github-actions
 
-#### Proof of concept - not fit for production, not maintained
-
 ## Troubleshooting
 
 ```
