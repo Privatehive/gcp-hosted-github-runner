@@ -19,9 +19,8 @@ jobs:
       - name: "Build Docker Image"
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64
           context: runner-autoscaler
           tags: |
             Privatehive/runner-autoscaler:latest
-            Privatehive/runner-autoscaler:${{ github.ref }}
+            Privatehive/runner-autoscaler:${{ github.ref_name }}
           push: true
