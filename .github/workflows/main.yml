@@ -3,7 +3,7 @@ on: push
 
 jobs:
   build_docker_image:
-    name: "Build Docker Image"
+    name: "Build/Upload Docker Image"
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -18,11 +18,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: "Build Docker Image"
+      - name: "Build/Upload Docker Image"
         uses: docker/build-push-action@v6
         with:
           context: runner-autoscaler
           tags: |
-            Privatehive/runner-autoscaler:latest
-            Privatehive/runner-autoscaler:${{ github.ref_name }}
+            ghcr.io/Privatehive/runner-autoscaler:latest
+            ghcr.io/Privatehive/runner-autoscaler:${{ github.ref_name }}
           push: true

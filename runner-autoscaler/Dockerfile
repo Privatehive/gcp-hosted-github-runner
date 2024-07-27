@@ -18,8 +18,8 @@ FROM scratch AS run
 LABEL org.opencontainers.image.title="runner-autoscaler"
 LABEL org.opencontainers.image.authors="Björn Stresing <bjoern.stresing@gmx.de>"
 LABEL org.opencontainers.image.description="This image provides a webserver that listens for GitHub actions webhooks and provision compute instances if needed"
-LABEL org.opencontainers.image.source="https://github.com/Tereius/g-spot-runner-github-actions/tree/master/runner-autoscaler"
-LABEL org.opencontainers.image.url="https://github.com/users/Tereius/packages/container/package/runner-autoscaler"
+LABEL org.opencontainers.image.source="https://github.com/Privatehive/g-spot-runner-github-actions"
+LABEL org.opencontainers.image.url="https://github.com/users/Privatehive/packages/container/package/runner-autoscaler"
 
 WORKDIR /rundir
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
