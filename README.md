@@ -14,7 +14,7 @@ Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/a
 Add this Terraform module to your root module and provide the missing values:
 
 ``` hcl
-module "spot-agents" {
+module "spot-runner" {
   source               = "github.com/Privatehive/g-spot-runner-github-actions"
   github_pat_token     = "<personal_access_token>"
   github_organization  = "<the_organization>"
@@ -30,7 +30,7 @@ provider "google" {
 }
 
 output "runner_webhook_config" {
-  value = nonsensitive(module.spot-agents.runner_webhook_config)
+  value = nonsensitive(module.spot-runner.runner_webhook_config)
 }
 ```
 
