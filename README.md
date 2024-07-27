@@ -37,7 +37,7 @@ output "runner_webhook_config" {
 Authenticate with `gcloud` and apply the Terraform (apply twice if the first apply results in an error)
 
 ``` bash
-terraform init && terraform apply
+$ terraform init && terraform apply
 ```
 
 Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook url and secret. Now switch to your GitHub organization settings and create a new webhook:
