@@ -23,6 +23,6 @@ jobs:
         with:
           context: runner-autoscaler
           tags: |
-            ghcr.io/Privatehive/runner-autoscaler:latest
-            ghcr.io/Privatehive/runner-autoscaler:${{ github.ref_name }}
+            ghcr.io/privatehive/runner-autoscaler:latest
+            ghcr.io/privatehive/runner-autoscaler:${{ github.ref_name }}
           push: true
