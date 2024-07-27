@@ -18,7 +18,7 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
       max_instance_count = 1
     }
     containers {
-      image = "${local.region}-docker.pkg.dev/${local.projectId}/${google_artifact_registry_repository.ghcr.name}/tereius/runner-autoscaler:latest"
+      image = "${local.region}-docker.pkg.dev/${local.projectId}/${google_artifact_registry_repository.ghcr.name}/privatehive/runner-autoscaler:latest"
       env {
         name  = "PROJECT_ID"
         value = local.projectId
