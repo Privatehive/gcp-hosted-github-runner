@@ -1,9 +1,9 @@
-name: "Create "
+name: "Build/Push runner-autoscaler Docker Image"
 on: push
 
 jobs:
   build_docker_image:
-    name: "Build/Upload Docker Image"
+    name: "Build/Push Docker Image"
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -18,7 +18,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: "Build/Upload Docker Image"
+      - name: "Build/Push Docker Image"
         uses: docker/build-push-action@v6
         env:
           DOCKER_BUILD_SUMMARY: false
