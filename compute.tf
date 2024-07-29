@@ -19,7 +19,7 @@ resource "google_compute_instance_template" "spot_instance" {
     boot         = true
     source_image = var.spot_machine_image
     disk_type    = "pd-standard"
-    disk_size_gb = 30
+    disk_size_gb = 40
   }
 
   network_interface {
