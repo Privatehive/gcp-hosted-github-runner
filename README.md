@@ -57,7 +57,7 @@ As soon as you start a GitHub workflow, which contains a job with `runs-on: self
 
 ## Configuration
 
-Have a look at the variables.tf file how to configure the Terraform module.
+Have a look at the [variables.tf](./variables.tf) file how to configure the Terraform module.
 
 > [!TIP]
 > To find the cheapest VM machine_type use this [table](https://gcloud-compute.com/instances.html) and sort by Spot instance cost. But remember that the price varies depending on the region.
