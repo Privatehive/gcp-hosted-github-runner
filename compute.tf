@@ -1,23 +1,23 @@
 resource "google_compute_instance_template" "spot_instance" {
 
-  name         = "ephemeral-runner"
+  name         = "ephemeral-github-runner"
   region       = local.region
-  machine_type = var.spot_machine_type
-  tags         = ["http-egress", "ssh-ingress"]
+  machine_type = var.machine_type
+  tags         = var.enable_ssh ? ["http-egress", "ssh-ingress"] : ["http-egress"]
   depends_on   = [google_project_service.compute_api]
 
   scheduling {
-    preemptible                 = true
+    preemptible                 = var.machine_preemtible
     automatic_restart           = false
     on_host_maintenance         = "TERMINATE"
     instance_termination_action = "STOP"
-    provisioning_model          = "SPOT"
+    provisioning_model          = var.machine_preemtible ? "SPOT" : "STANDARD"
   }
 
   disk {
     auto_delete  = true
     boot         = true
-    source_image = var.spot_machine_image
+    source_image = var.machine_image
     disk_type    = "pd-standard"
     disk_size_gb = 40
   }
@@ -49,7 +49,7 @@ chown -R agent:agent /home/agent
 pushd /home/agent
 sudo -u agent tar zxf /tmp/agent.tar.gz
 register_token=$(curl -s -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${var.github_pat_token}" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/orgs/${var.github_organization}/actions/runners/registration-token | jq -r .token)
-sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) --url 'https://github.com/${var.github_organization}' --token $${register_token} --runnergroup '${var.github_runner_group}' || shutdown now
+sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) ${local.runnerLabelInstanceTemplate} --url 'https://github.com/${var.github_organization}' --token $${register_token} --runnergroup '${var.github_runner_group}' || shutdown now
 ./bin/installdependencies.sh || shutdown now
 ./svc.sh install agent || shutdown now
 ./svc.sh start || shutdown now

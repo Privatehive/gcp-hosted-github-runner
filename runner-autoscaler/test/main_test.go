@@ -17,20 +17,20 @@ var PORT = 9999
 func init() {
 
 	scaler := pkg.NewAutoscaler(pkg.AutoscalerConfig{
-		RouteCreateRunner:   "/create",
-		RouteDeleteRunner:   "/delete",
-		RouteWebhook:        "/webhook",
-		WebhookSecret:       "It's a Secret to Everybody",
-		ProjectId:           "1",
-		Zone:                "z",
-		TaskQueue:           "q",
-		InstanceTemplateUrl: "/",
-		RunnerPrefix:        "runner",
+		RouteCreateVm:    "/create",
+		RouteDeleteVm:    "/delete",
+		RouteWebhook:     "/webhook",
+		WebhookSecret:    "It's a Secret to Everybody",
+		ProjectId:        "1",
+		Zone:             "z",
+		TaskQueue:        "q",
+		InstanceTemplate: "/",
+		RunnerPrefix:     "runner",
 	})
 	go scaler.Srv(PORT)
 }
 
-func Test(t *testing.T) {
+func TestWebhookSignature(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	req, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://localhost:%d/webhook", PORT), strings.NewReader("Hello, World!"))
 	req.Header.Add("x-hub-signature-256", "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17")

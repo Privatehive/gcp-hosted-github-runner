@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/Tereius/g-spot-runner-github-actions/pkg"
 	log "github.com/sirupsen/logrus"
@@ -27,20 +28,27 @@ func mustGetEnv(name string) string {
 
 func main() {
 
-	log.Info("Starting poll server")
-
+	labels := strings.Split(getEnvDefault("RUNNER_LABELS", "self-hosted"), ",")
+	runnerGroup := getEnvDefault("RUNNER_GROUP", "Default")
 	scaler := pkg.NewAutoscaler(pkg.AutoscalerConfig{
-		RouteCreateRunner:   getEnvDefault("ROUTE_CREATE_RUNNER", "/create_runner"),
-		RouteDeleteRunner:   getEnvDefault("ROUTE_DELETE_RUNNER", "/delete_runner"),
-		RouteWebhook:        getEnvDefault("ROUTE_WEBHOOK", "/webhook"),
-		WebhookSecret:       getEnvDefault("WEBHOOK_SECRET", "arbitrarySecret"),
-		ProjectId:           mustGetEnv("PROJECT_ID"),
-		Zone:                mustGetEnv("ZONE"),
-		TaskQueue:           mustGetEnv("TASK_QUEUE"),
-		InstanceTemplateUrl: mustGetEnv("INSTANCE_TEMPLATE_URL"),
-		RunnerPrefix:        getEnvDefault("RUNNER_PREFIX", "runner"),
-		RunnerGroup:         getEnvDefault("RUNNER_GROUP", "Default"),
+		RouteWebhook:     getEnvDefault("ROUTE_WEBHOOK", "/webhook"),
+		RouteCreateVm:    getEnvDefault("ROUTE_CREATE_VM", "/create_vm"),
+		RouteDeleteVm:    getEnvDefault("ROUTE_DELETE_VM", "/delete_vm"),
+		WebhookSecret:    getEnvDefault("WEBHOOK_SECRET", ""),
+		ProjectId:        mustGetEnv("PROJECT_ID"),
+		Zone:             mustGetEnv("ZONE"),
+		TaskQueue:        mustGetEnv("TASK_QUEUE"),
+		InstanceTemplate: mustGetEnv("INSTANCE_TEMPLATE"),
+		RunnerPrefix:     getEnvDefault("RUNNER_PREFIX", "runner"),
+		RunnerGroup:      runnerGroup,
+		RunnerLabels:     labels,
 	})
+
+	if len(labels) == 0 {
+		log.Warn("No workflow runner labels were provided. You should at least add the label \"self-hosted\"")
+	}
+
 	port, _ := strconv.Atoi(getEnvDefault("PORT", "8080"))
+	log.Infof("Starting autoscaler on port %d observing workflow jobs of runner group \"%s\" with labels \"%s\"", port, runnerGroup, strings.Join(labels, ", "))
 	scaler.Srv(port)
 }

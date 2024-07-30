@@ -29,6 +29,9 @@ const SHA_PREFIX = "sha256="
 const SHA_HEADER = "x-hub-signature-256"
 const EVENT_HEADER = "x-github-event"
 
+const WEBHOOK_PING_EVENT = "ping"
+const WEBHOOK_JOB_EVENT = "workflow_job"
+
 type Job struct {
 	Id              int64    `json:"id"`
 	Name            string   `json:"name"`
@@ -51,6 +54,18 @@ func (j Job) hasLabel(label string) bool {
 		}
 	}
 	return false
+}
+
+// returns true if all labels were found. false otherwise. Returns also all labels that were missing
+func (j Job) hasAllLabels(labels []string) (bool, []string) {
+
+	missingLabels := []string{}
+	for _, label := range labels {
+		if !j.hasLabel(label) {
+			missingLabels = append(missingLabels, label)
+		}
+	}
+	return len(missingLabels) <= 0, missingLabels
 }
 
 type Action string
@@ -249,9 +264,9 @@ func (s *Autoscaler) createInstanceFromTemplate(ctx context.Context, instanceNam
 		InstanceResource: &computepb.Instance{
 			Name: proto.String(instanceName),
 		},
-		SourceInstanceTemplate: &s.conf.InstanceTemplateUrl,
+		SourceInstanceTemplate: &s.conf.InstanceTemplate,
 	}); err != nil {
-		log.Errorf("Could not create instance %s from template: %s - %s", instanceName, s.conf.InstanceTemplateUrl, err.Error())
+		log.Errorf("Could not create instance %s from template: %s - %s", instanceName, s.conf.InstanceTemplate, err.Error())
 		return err
 	} else {
 		if err := res.Wait(ctx); err != nil {
@@ -267,18 +282,15 @@ func (s *Autoscaler) createInstanceFromTemplate(ctx context.Context, instanceNam
 func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, message string) (*taskspb.Task, error) {
 
 	now := timestamppb.Now()
-	now.Seconds += 1
-	// Build the Task payload.
-	// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#CreateTaskRequest
+	now.Seconds += 1 // delay the callback a little bit
 	req := &taskspb.CreateTaskRequest{
 		Parent: s.conf.TaskQueue,
 		Task: &taskspb.Task{
 			DispatchDeadline: &durationpb.Duration{
-				Seconds: 120,
+				Seconds: 120, // the timeout of the cloud task callback
 				Nanos:   0,
 			},
 			ScheduleTime: now,
-			// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#HttpRequest
 			MessageType: &taskspb.Task_HttpRequest{
 				HttpRequest: &taskspb.HttpRequest{
 					HttpMethod: taskspb.HttpMethod_POST,
@@ -291,43 +303,33 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 		},
 	}
 
-	// Add a payload message if one is present.
 	req.Task.GetHttpRequest().Body = []byte(message)
 
 	createdTask, err := s.t.CreateTask(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("cloudtasks.CreateTask: %w", err)
+		return nil, fmt.Errorf("cloudtasks.CreateTask failed: %v", err)
 	} else {
-		log.Info("Created callback task")
+		log.Infof("Created cloud task callback with url \"%s\" and payload \"%s\"", url, message)
 	}
 
 	return createdTask, nil
 }
 
-func (s *Autoscaler) handleCreateRunner(ctx *gin.Context) {
+func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 
-	log.Info("Received handleCreateRunner call")
+	log.Info("Received create-vm cloud task callback")
 	if data, err := s.verifySignature(ctx); err == nil {
 		if err := s.createInstanceFromTemplate(ctx, string(data)); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
 			ctx.Status(http.StatusOK)
-			/*
-				delteUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
-				if _, err := s.createCallbackTaskWithToken(ctx, delteUrl, runnerName); err != nil {
-					log.Errorf("Immediately delete instance \"%s\" again because callback could not be created", runnerName)
-					s.deleteInstance(context.Background(), runnerName) // Ignore timeous, make sure the spot instance gets destroyed
-					ctx.AbortWithError(http.StatusInternalServerError, err)
-				} else {
-					ctx.Status(http.StatusOK)
-				}*/
 		}
 	}
 }
 
-func (s *Autoscaler) handleDeleteRunner(ctx *gin.Context) {
+func (s *Autoscaler) handleDeleteVm(ctx *gin.Context) {
 
-	log.Info("Received handleDeleteRunner call")
+	log.Info("Received delete-vm cloud task callback")
 	if data, err := s.verifySignature(ctx); err == nil {
 		if err := s.deleteInstance(ctx, string(data)); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
@@ -339,65 +341,67 @@ func (s *Autoscaler) handleDeleteRunner(ctx *gin.Context) {
 
 func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 
-	log.Info("Received webhook call")
+	log.Info("Received webhook")
 	if data, err := s.verifySignature(ctx); err == nil {
 		event := ctx.GetHeader(EVENT_HEADER)
-		log.Info(ctx.Request.Header)
 		log.Info(string(data))
-		if event == "ping" {
-			log.Info("Received ping")
+		if event == WEBHOOK_PING_EVENT {
+			log.Info("Webhook ping acknowledged")
 			ctx.Status(http.StatusOK)
-		} else if event == "workflow_job" {
+		} else if event == WEBHOOK_JOB_EVENT {
 			payload := Payload{}
 			if err := json.Unmarshal(data, &payload); err != nil {
-				log.Errorf("Can not unmarshal payload: %s", err.Error())
+				log.Errorf("Can not unmarshal payload - is the webhook content type set to \"application/json\"? %s", err.Error())
 				ctx.AbortWithError(http.StatusBadRequest, err)
 			} else {
 				if payload.Action == QUEUED {
-					if payload.Job.hasLabel("self-hosted") {
-						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateRunner)
-						log.Infof("About to create new instance callback task with url: %s", createUrl)
+					if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
+						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateVm)
 						if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, randStringRunes(10))); err != nil {
-							log.Errorf("Can not create callback: %s", err.Error())
+							log.Errorf("Can not enqueue create-vm cloud task callback: %s", err.Error())
+							ctx.AbortWithError(http.StatusInternalServerError, err)
+							return
 						}
 					} else {
-						log.Info("Webhook requested to start a runner that is not self-hosted - ignoring")
+						log.Warnf("Webhook requested to start a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 					}
 				} else if payload.Action == COMPLETED {
 					if payload.Job.RunnerGroupName == s.conf.RunnerGroup {
-						if strings.HasPrefix(payload.Job.RunnerName, s.conf.RunnerPrefix) {
-							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteRunner)
-							log.Infof("About to create delete callback task with url: %s", deleteUrl)
+						if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
+							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm)
 							if _, err := s.createCallbackTaskWithToken(ctx, deleteUrl, payload.Job.RunnerName); err != nil {
-								log.Errorf("Can not create callback: %s", err.Error())
+								log.Errorf("Can not enqueue delete-vm cloud task callback: %s", err.Error())
+								ctx.AbortWithError(http.StatusInternalServerError, err)
+								return
 							}
 						} else {
-							log.Warnf("Webhook requested to stop a runner that does not start with the expected runner prefix (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerPrefix, payload.Job.RunnerName)
+							log.Warnf("Webhook signaled to delete a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 						}
 					} else {
-						log.Warnf("Webhook requested to stop a runner that does not belong to the expected runner group (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerGroup, payload.Job.RunnerGroupName)
+						log.Warnf("Webhook signaled to delete a runner that does not belong to the expected runner group (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerGroup, payload.Job.RunnerGroupName)
 					}
 				}
 				ctx.Status(http.StatusOK)
 			}
 		} else {
-			log.Warnf("Unknown GitHub event \"%s\" received - ignored", event)
+			log.Infof("Unknown GitHub webhook event \"%s\" received - ignoring", event)
 			ctx.Status(http.StatusOK)
 		}
 	}
 }
 
 type AutoscalerConfig struct {
-	RouteCreateRunner   string
-	RouteDeleteRunner   string
-	RouteWebhook        string
-	WebhookSecret       string
-	ProjectId           string
-	Zone                string
-	TaskQueue           string
-	InstanceTemplateUrl string
-	RunnerPrefix        string
-	RunnerGroup         string
+	RouteWebhook     string
+	RouteCreateVm    string
+	RouteDeleteVm    string
+	WebhookSecret    string
+	ProjectId        string
+	Zone             string
+	TaskQueue        string
+	InstanceTemplate string
+	RunnerPrefix     string
+	RunnerGroup      string
+	RunnerLabels     []string
 }
 
 type Autoscaler struct {
@@ -417,8 +421,8 @@ func NewAutoscaler(config AutoscalerConfig) Autoscaler {
 		conf:   config,
 	}
 	engine.Use(ginlogrus.Logger(log.WithFields(log.Fields{})))
-	engine.POST(config.RouteCreateRunner, scaler.handleCreateRunner)
-	engine.POST(config.RouteDeleteRunner, scaler.handleDeleteRunner)
+	engine.POST(config.RouteCreateVm, scaler.handleCreateVm)
+	engine.POST(config.RouteDeleteVm, scaler.handleDeleteVm)
 	engine.POST(config.RouteWebhook, scaler.handleWebhook)
 	engine.GET("/healthcheck", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
 	return scaler

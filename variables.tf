@@ -1,24 +1,30 @@
-variable "spot_machine_type" {
+variable "machine_type" {
   type        = string
-  description = "The machine type that each spot agent will use"
+  description = "The VM instance machine type where the GitHub runner will run on"
   default     = "e2-micro"
 }
 
-variable "spot_machine_image" {
+variable "machine_image" {
   type        = string
-  description = "The machine Linux image to run (gcloud compute images list --filter ubuntu-os)"
+  description = "The VM instance boot image (gcloud compute images list --filter ubuntu-os). Only Linux is supported."
   default     = "ubuntu-os-cloud/ubuntu-minimal-2004-lts"
+}
+
+variable "machine_preemtible" {
+  type        = bool
+  description = "The VM instance will be an preemtible spot instance that costs much less but may be stop by gcp at any time (leading to a failed workflow job)."
+  default     = true
 }
 
 variable "enable_ssh" {
   type        = bool
-  description = "Enable SSH access"
+  description = "Enable SSH access to the VM instances"
   default     = false
 }
 
 variable "use_cloud_nat" {
   type        = bool
-  description = "Use a cloud nat and router instead of a public ip address for the compute instances"
+  description = "Use a cloud NAT and router instead of a public ip address for the VM instances"
   default     = false
 }
 
@@ -45,9 +51,19 @@ variable "github_runner_group" {
   default     = "Default"
 }
 
+variable "github_runner_labels" {
+  type        = list(string)
+  description = "One or multiple labels the runner will be tagged with"
+  default     = ["self-hosted"]
+  validation {
+    condition     = length(var.github_runner_labels) > 0
+    error_message = "The variable github_runner_labels must contain at least one not empty value!"
+  }
+}
+
 variable "github_runner_prefix" {
   type        = string
-  description = "The prefix of each runner"
+  description = "The name prefix of the runner (a random string will be automatically added to make the name unique)."
   default     = "runner"
 }
 

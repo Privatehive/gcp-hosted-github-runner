@@ -2,7 +2,7 @@
 
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Privatehive/g-spot-runner-github-actions/main.yml?branch=master&style=flat&logo=github&label=Docker+build)](https://github.com/Privatehive/g-spot-runner-github-actions/actions?query=branch%3Amaster)
 
-**This terraform module provides a ready to use solution for Google Cloud hosted [GitHub ephemeral runner](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners#using-ephemeral-runners-for-autoscaling). To save cost preemtible spot compute instances will be used.**
+**This terraform module provides a ready to use solution for Google Cloud hosted [GitHub ephemeral runner](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners#using-ephemeral-runners-for-autoscaling).**
 
 > [!IMPORTANT]
 > I am not responsible if this Terraform module results in high costs on your billing account. Keep an eye on your billing account and activate alerts!
@@ -20,7 +20,7 @@ module "spot-runner" {
   github_organization  = "<the_organization>"
   github_runner_group  = "Default"
   github_runner_prefix = "runner"
-  spot_machine_type    = "c2d-highcpu-8"
+  machine_type         = "c2d-highcpu-8"
 }
 
 provider "google" {
@@ -34,10 +34,11 @@ output "runner_webhook_config" {
 }
 ```
 
-Authenticate with `gcloud` and apply the Terraform (apply twice if the first apply results in an error)
+Authenticate with `gcloud` and apply the terraform module (apply twice if the first apply results in an error - wait some minutes in between)
 
 ``` bash
-$ terraform init && terraform apply
+$ gcloud auth application-default login --project <gcp_project>
+$ terraform init -upgrade && terraform apply
 ```
 
 Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook url and secret. Now switch to your GitHub organization settings and create a new webhook:
@@ -52,19 +53,26 @@ Have a look at the Terraform output `runner_webhook_config`. There you find the 
 
 That's it.
 
-As soon as you start a GitHub workflow, which contains a job with `runs-on: self-hosted`, a compute instance (with the specified `spot_machine_type` type) starts. The name of the compute instance starts with the `github_runner_prefix` which is followed by a random string. The name of the compute instance is also the name of the runner in GitHub. After the job completed, the compute instance will be deleted again.
+As soon as you start a GitHub workflow, which contains a job with `runs-on: self-hosted`, a VM instance (with the specified `machine_type`) starts. The name of the VM instance starts with the `github_runner_prefix`, which is followed by a random string to make the name unique. The name of the VM instance is also the name of the runner in the GitHub runner group. After the workflow job completed, the VM instance will be deleted again.
+
+## Configuration
+
+Have a look at the variables.tf file how to configure the Terraform module.
+
+> [!TIP]
+> To find the cheapest VM machine_type use this [table](https://gcloud-compute.com/instances.html) and sort by Spot instance cost. But remember that the price varies depending on the region.
 
 ## How it works
 
 1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/g-spot-runner-github-actions/pkgs/container/runner-autoscaler) with path `/webhook`
-2. The Cloud run enqueues a "create runner" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a compute instance takes about 1 minute.
-3. The Cloud task invokes the Cloud Run path `/create_runner`.
-4. The Cloud Run creates the preemtible spot compute instance from the instance template
-5. In the startup script the compute instance uses the PAT to generate a runner token. With the token it registers itself as an ephemeral runner in the runner group and immediately starts working on the workflow job.
+2. The Cloud run enqueues a "create-vm" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
+3. The Cloud task invokes the Cloud Run path `/create_vm`.
+4. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default)
+5. In the startup script of the VM instance the PAT is used to generate a runner token. With the token the VM registers itself as an **ephemeral** runner in the runner group and immediately starts working on the workflow job.
 6. As soon as the workflow job completed, the GitHub webhook event "Workflow jobs" invokes the Cloud Run again.
-7. The Cloud run enqueues a "delete runner" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a compute instance takes about 1 minute.
-8. The Cloud task invokes the Cloud Run path `/delete_runner`.
-9. The Cloud Run deletes the compute instance.
+7. The Cloud run enqueues a "delete-vm" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
+8. The Cloud task invokes the Cloud Run path `/delete_vm`.
+9. The Cloud Run deletes the VM instance.
 
 ## Troubleshooting
 
@@ -79,6 +87,6 @@ Error applying IAM policy for cloudrun service "v1/projects/azure-pipelines-spot
 
 2. Solution: Override the Organization Policy "Domain Restricted Sharing" in the project, by setting it to "Allow all".
 
-#### New compute Instance not starting (but a lot of instances are already running)
+#### New VM Instance not starting (but a lot of instances are already running)
 
-You exceeded your projects vCPU limit for the machine type in the region. You may find an error log message in the Cloud Run logs stating `Machine Type vCPU quota exceeded for region`. Request a quota increase from google customer support for the project.
+You exceeded your projects vCPU limit for the machine type in the region or for all regions. You may find an error log message in the Cloud Run logs stating `Machine Type vCPU quota exceeded for region`. Request a quota increase from google customer support for the project.

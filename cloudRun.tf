@@ -11,7 +11,7 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
 
   template {
     service_account                  = google_service_account.agent_autoscaler.email
-    max_instance_request_concurrency = 10
+    max_instance_request_concurrency = 20
     timeout                          = "120s"
     scaling {
       min_instance_count = 0
@@ -32,7 +32,7 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
         value = google_cloud_tasks_queue.agent_autoscaler_tasks.id
       }
       env {
-        name  = "INSTANCE_TEMPLATE_URL"
+        name  = "INSTANCE_TEMPLATE"
         value = google_compute_instance_template.spot_instance.id
       }
       env {
@@ -44,20 +44,16 @@ resource "google_cloud_run_v2_service" "agent_autoscaler" {
         value = var.github_runner_group
       }
       env {
+        name  = "RUNNER_LABELS"
+        value = local.runnerLabel
+      }
+      env {
         name  = "WEBHOOK_SECRET"
         value = random_password.webhook_secret.result
       }
       env {
         name  = "ROUTE_WEBHOOK"
         value = local.webhookUrl
-      }
-      env {
-        name  = "ROUTE_CREATE_RUNNER"
-        value = local.webhookCreateRunner
-      }
-      env {
-        name  = "ROUTE_DELETE_RUNNER"
-        value = local.webhookDeleteRunner
       }
       dynamic "env" {
         for_each = var.enable_debug ? [0] : []
