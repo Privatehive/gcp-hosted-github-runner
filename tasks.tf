@@ -1,4 +1,4 @@
-resource "google_cloud_tasks_queue" "agent_autoscaler_tasks" {
+resource "google_cloud_tasks_queue" "autoscaler_tasks" {
   name       = "autoscaler-callback-queue"
   location   = local.region
   depends_on = [google_project_service.cloudtasks_api]

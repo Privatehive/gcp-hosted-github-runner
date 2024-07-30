@@ -14,7 +14,7 @@ Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/a
 Add this Terraform module to your root module and provide the missing values:
 
 ``` hcl
-module "spot-runner" {
+module "github-runner" {
   source               = "github.com/Privatehive/gcp-hosted-github-runner"
   github_pat_token     = "<personal_access_token>"
   github_organization  = "<the_organization>"
@@ -30,7 +30,7 @@ provider "google" {
 }
 
 output "runner_webhook_config" {
-  value = nonsensitive(module.spot-runner.runner_webhook_config)
+  value = nonsensitive(module.github-runner.runner_webhook_config)
 }
 ```
 
@@ -64,7 +64,7 @@ Have a look at the [variables.tf](./variables.tf) file how to configure the Terr
 
 ## How it works
 
-1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/runner-autoscaler) with path `/webhook`
+1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/github-runner-autoscaler) with path `/webhook`
 2. The Cloud run enqueues a "create-vm" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
 3. The Cloud task invokes the Cloud Run path `/create_vm`.
 4. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default)

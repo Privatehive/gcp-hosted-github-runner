@@ -1,4 +1,4 @@
-resource "google_compute_instance_template" "spot_instance" {
+resource "google_compute_instance_template" "runner_instance" {
 
   name         = "ephemeral-github-runner"
   region       = local.region

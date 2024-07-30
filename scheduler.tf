@@ -8,7 +8,7 @@
 #
 #  http_target {
 #    http_method = "GET"
-#    uri         = "${google_cloud_run_v2_service.agent_autoscaler.uri}/${random_string.route_poll.result}"
+#    uri         = "${google_cloud_run_v2_service.autoscaler.uri}/${random_string.route_poll.result}"
 #
 #    oauth_token {
 #      service_account_email = google_service_account.webhook_scheduler_sa.email
