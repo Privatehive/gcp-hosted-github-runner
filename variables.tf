@@ -30,7 +30,7 @@ variable "use_cloud_nat" {
 
 variable "enable_debug" {
   type        = bool
-  description = "Enable debug messages in agent-autoscaler (WARNING: secrets will be leaked in log files)"
+  description = "Enable debug messages of runner-autoscaler Cloud Run (WARNING: secrets will be leaked in log files)"
   default     = false
 }
 

@@ -1,6 +1,6 @@
-# g-spot-runner-github-actions
+# gcp-hosted-github-runner
 
-[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Privatehive/g-spot-runner-github-actions/main.yml?branch=master&style=flat&logo=github&label=Docker+build)](https://github.com/Privatehive/g-spot-runner-github-actions/actions?query=branch%3Amaster)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Privatehive/gcp-hosted-github-runner/main.yml?branch=master&style=flat&logo=github&label=Docker+build)](https://github.com/Privatehive/gcp-hosted-github-runner/actions?query=branch%3Amaster)
 
 **This terraform module provides a ready to use solution for Google Cloud hosted [GitHub ephemeral runner](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners#using-ephemeral-runners-for-autoscaling).**
 
@@ -15,7 +15,7 @@ Add this Terraform module to your root module and provide the missing values:
 
 ``` hcl
 module "spot-runner" {
-  source               = "github.com/Privatehive/g-spot-runner-github-actions"
+  source               = "github.com/Privatehive/gcp-hosted-github-runner"
   github_pat_token     = "<personal_access_token>"
   github_organization  = "<the_organization>"
   github_runner_group  = "Default"
@@ -64,7 +64,7 @@ Have a look at the variables.tf file how to configure the Terraform module.
 
 ## How it works
 
-1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/g-spot-runner-github-actions/pkgs/container/runner-autoscaler) with path `/webhook`
+1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/runner-autoscaler) with path `/webhook`
 2. The Cloud run enqueues a "create-vm" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
 3. The Cloud task invokes the Cloud Run path `/create_vm`.
 4. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default)
@@ -80,7 +80,7 @@ Have a look at the variables.tf file how to configure the Terraform module.
 
 The terraform error looks something like this:
 ```
-Error applying IAM policy for cloudrun service "v1/projects/azure-pipelines-spot-agent/locations/us-east1/services/cloudrun-service": Error setting IAM policy for cloudrun service "v1/projects/azure-pipelines-spot-agent/locations/us-east1/services/cloudrun-service": googleapi: Error 400: One or more users named in the policy do not belong to a permitted customer,  perhaps due to an organization policy
+Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": Error setting IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": googleapi: Error 400: One or more users named in the policy do not belong to a permitted customer,  perhaps due to an organization policy
 ```
 
 1. Solution: Use project tags: [How to create public Cloud Run services when Domain Restricted Sharing is enforced](https://cloud.google.com/blog/topics/developers-practitioners/how-create-public-cloud-run-services-when-domain-restricted-sharing-enforced?hl=en)

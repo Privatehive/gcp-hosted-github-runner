@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Tereius/g-spot-runner-github-actions/pkg"
+	"github.com/Tereius/gcp-hosted-github-runner/pkg"
 	log "github.com/sirupsen/logrus"
 )
 

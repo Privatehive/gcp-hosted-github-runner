@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tereius/g-spot-runner-github-actions/pkg"
+	"github.com/Tereius/gcp-hosted-github-runner/pkg"
 	"github.com/stretchr/testify/assert"
 )
 

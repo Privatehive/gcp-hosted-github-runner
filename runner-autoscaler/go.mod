@@ -1,4 +1,4 @@
-module github.com/Tereius/g-spot-runner-github-actions
+module github.com/Tereius/gcp-hosted-github-runner
 
 go 1.21
 
