@@ -1,5 +1,10 @@
+resource "random_password" "task_queue_suffix" {
+  length  = 5
+  upper = false
+}
+
 resource "google_cloud_tasks_queue" "autoscaler_tasks" {
-  name       = "autoscaler-callback-queue"
+  name       = "autoscaler-callback-queue-${random_password.task_queue_suffix.result}"
   location   = local.region
   depends_on = [google_project_service.cloudtasks_api]
 
