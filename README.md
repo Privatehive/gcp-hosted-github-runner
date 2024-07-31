@@ -87,7 +87,7 @@ Have a look at the [variables.tf](./variables.tf) file how to further configure 
 9. The Cloud Run deletes the VM instance.
 
 > [!NOTE]
-> The runner is run by the unprivileged user `agent` with the uid `10000`
+> The runner is run by the unprivileged user `agent` with the uid `10000` and gid `10000`
 
 ## Troubleshooting
 
@@ -108,6 +108,11 @@ The VM will shoutdown itself if the registration at the GitHub runner group fail
 * An invalid/expired PAT or a PAT with insufficient permission. Check if the PAT is valid, has the Organization Read/Write permission "Self-hosted runners" and is stored in the Secret Manager secret.
 * A typo in the GitHub Organization name. Check the Terraform variable `github_organization` for typos.
 * A not existing GitHub runner group within the Organization. Check the Terraform variable `github_runner_group` for typos.
+
+You can observer the runner registration process by connecting to the VM instance via SSH and running:
+```
+$ sudo journalctl -u google-startup-scripts.service --follow
+```
 
 #### New VM Instance not starting (but a lot of instances are already running)
 
