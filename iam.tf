@@ -44,7 +44,7 @@ resource "google_service_account" "autoscaler_sa" {
 resource "google_project_iam_custom_role" "manage_vm_instances" {
   role_id     = "ManageVmInstances"
   title       = "Manage VM instance(s)"
-  permissions = ["compute.instances.get", "compute.instances.start", "compute.instances.stop", "compute.instances.delete", "compute.instances.create", "compute.instances.setMetadata", "compute.instances.setTags"]
+  permissions = ["compute.instances.get", "compute.instances.start", "compute.instances.stop", "compute.instances.delete", "compute.instances.create", "compute.instances.setMetadata", "compute.instances.setTags", "compute.instances.setServiceAccount"]
 }
 
 resource "google_project_iam_custom_role" "create_cloud_task" {
