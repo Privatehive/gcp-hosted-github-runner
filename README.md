@@ -89,6 +89,32 @@ Have a look at the [variables.tf](./variables.tf) file how to further configure 
 > [!NOTE]
 > The runner is run by the unprivileged user `agent` with the uid `10000` and gid `10000`
 
+## Expected Cost
+
+The following Google Cloud resources are created that may generate cost:
+* Cloud Task (covered by Free Tier)
+* Secret Version (covered by Free Tier)
+* Artifact Registry (covered by Free Tier)
+* Cloud Run (covered by Free Tier)
+* (Spot) VM Instance(s) + standard persistent disk + ephemeral external IPv4
+
+Other:
+* Egress network traffic (200 GiB/month is free)
+
+**Example:**
+
+A single 1 h long workflow job in europe-west1 leads to the following cost:
+
+```
+Ephemeral external IPv4 for Spot instance $0.0025
+Spot VM Instance c2d-highcpu-8            $0.0494
+Standard persistent disk 40 GiB         ~ $0.0011
+-----------------------------------------------------
+                                          $0.053
+```
+
+Overall, only the compute instance accounts for the majority of the costs.
+
 ## Troubleshooting
 
 #### Public access to Cloud Run disallowed
