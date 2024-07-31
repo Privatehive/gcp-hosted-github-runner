@@ -95,6 +95,14 @@ resource "google_project_iam_member" "create_cloud_task_member" {
   #}
 }
 
+resource "google_project_iam_member" "service_account_user_member" {
+  project = local.projectId
+  member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
+  role    = "roles/iam.serviceAccountUser"
+
+  # TODO limit to github_runner_sa
+}
+
 resource "google_project_iam_member" "create_vm_from_instance_template_member" {
   project = local.projectId
   member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
