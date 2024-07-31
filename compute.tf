@@ -22,6 +22,11 @@ resource "google_compute_instance_template" "runner_instance" {
     disk_size_gb = 40
   }
 
+  service_account {
+    email  = google_service_account.github_runner_sa.email
+    scopes = ["cloud-platform"]
+  }
+
   network_interface {
     network    = google_compute_network.vpc_network.name
     subnetwork = google_compute_subnetwork.subnetwork.name
@@ -48,7 +53,8 @@ mkdir -p /home/agent
 chown -R agent:agent /home/agent
 pushd /home/agent
 sudo -u agent tar zxf /tmp/agent.tar.gz
-register_token=$(curl -s -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${var.github_pat_token}" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/orgs/${var.github_organization}/actions/runners/registration-token | jq -r .token)
+pat=$(gcloud secrets versions access latest --secret="${google_secret_manager_secret.github_pat_token.secret_id}")
+register_token=$(curl -s -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $pat" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/orgs/${var.github_organization}/actions/runners/registration-token | jq -r .token)
 sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) ${local.runnerLabelInstanceTemplate} --url 'https://github.com/${var.github_organization}' --token $${register_token} --runnergroup '${var.github_runner_group}' || shutdown now
 ./bin/installdependencies.sh || shutdown now
 ./svc.sh install agent || shutdown now

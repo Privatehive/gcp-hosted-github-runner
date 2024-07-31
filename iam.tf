@@ -1,9 +1,4 @@
-#data "google_compute_default_service_account" "default_sa" {
-#}
-
-#resource "google_service_account" "webhook_scheduler_sa" {
-#  account_id   = "autoscaler-scheduler-sa"
-#  display_name = "Invoke autoscaler"
+#data "google_compute_default_service_account" "default_compute_sa" {
 #}
 
 // Allow cloud run to pull image from container registry
@@ -13,6 +8,30 @@ resource "google_project_iam_member" "cloud_run_member" {
   for_each   = toset(["roles/artifactregistry.reader"])
   depends_on = [google_cloud_run_v2_service.autoscaler]
   role       = each.key
+}
+
+// ---- allow default compute-sa to access pat secret
+
+resource "google_service_account" "github_runner_sa" {
+  account_id   = "github-runner-sa"
+  display_name = "GitHub runner sa"
+}
+
+resource "google_project_iam_custom_role" "read_secret_version" {
+  role_id     = "AccessSecretVersion"
+  title       = "Access a secret payload"
+  permissions = ["secretmanager.versions.access"]
+}
+
+resource "google_project_iam_member" "read_secret_version_member" {
+  project = local.projectId
+  member  = "serviceAccount:${google_service_account.github_runner_sa.email}"
+  role    = google_project_iam_custom_role.read_secret_version.id
+  condition {
+    title       = "Read secret: ${google_secret_manager_secret.github_pat_token.secret_id}"
+    // The project number is needed - project id doesn't work
+    expression  = "resource.name == 'projects/${local.projectNumber}/secrets/${google_secret_manager_secret.github_pat_token.secret_id}/versions/latest'"
+  }
 }
 
 // ---- autoscaler-sa ----

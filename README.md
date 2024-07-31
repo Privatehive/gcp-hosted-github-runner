@@ -7,30 +7,31 @@
 > [!IMPORTANT]
 > I am not responsible if this Terraform module results in high costs on your billing account. Keep an eye on your billing account and activate alerts!
 
+> [!NOTE]
+> Only works for GitHub organization at the moment.
+
 ## Quickstart
 
-Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization permission "Self-hosted runners". This is needed to automatically create a token for each ephemeral runner to join the runner group of the organization (**Warning**: The PAT will be visible in the startup script of the compute instance).
-
+#### 1. Apply Terraform
 Add this Terraform module to your root module and provide the missing values:
 
 ``` hcl
-module "github-runner" {
-  source               = "github.com/Privatehive/gcp-hosted-github-runner"
-  github_pat_token     = "<personal_access_token>"
-  github_organization  = "<the_organization>"
-  github_runner_group  = "Default"
-  github_runner_prefix = "runner"
-  machine_type         = "c2d-highcpu-8"
-}
-
 provider "google" {
   project = "<gcp_project>"
   region  = "<gcp_region>"
   zone    = "<gcp_zone>"
 }
 
+module "github-runner" {
+  source               = "github.com/Privatehive/gcp-hosted-github-runner"
+  github_organization  = "<the_organization>" // Provide the name of the GitHub Organization
+  github_runner_group  = "Default" // The name of the GitHub Organization runner group
+  github_runner_prefix = "runner" // The VM instance name starts with this prefix (a random string is added as a suffix)
+  machine_type         = "c2d-highcpu-8" // The machine type of the VM instance
+}
+
 output "runner_webhook_config" {
-  value = nonsensitive(module.github-runner.runner_webhook_config)
+  value = nonsensitive(module.github-runner.runner_webhook_config) // remove the output after the initial setup
 }
 ```
 
@@ -41,7 +42,12 @@ $ gcloud auth application-default login --project <gcp_project>
 $ terraform init -upgrade && terraform apply
 ```
 
-Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook url and secret. Now switch to your GitHub organization settings and create a new webhook:
+> [!IMPORTANT]
+> After a successful initial setup you should remove the `runner_webhook_config` output because it prints the webhook secret. Also make sure that the Terraform state file is stored in a save place (e.g. in a [Cloud Storage bucket](https://cloud.google.com/docs/terraform/resource-management/store-state)). The state file contains the webhook secret as plaintext.
+
+#### 2. Configure GitHub webhook
+
+Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook url and secret. Now switch to your GitHub Organization settings and create a [new Organization webhook](https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks#creating-an-organization-webhook):
 * Fill in the Payload URL (from the Terraform output)
 * Select Content type "application/json"
 * Fill in the Secret (from the Terraform output)
@@ -51,13 +57,19 @@ Have a look at the Terraform output `runner_webhook_config`. There you find the 
 * Check "Active"
 * Click "Add webhook"
 
-That's it.
+#### 3. Provide PAT
 
-As soon as you start a GitHub workflow, which contains a job with `runs-on: self-hosted`, a VM instance (with the specified `machine_type`) starts. The name of the VM instance starts with the `github_runner_prefix`, which is followed by a random string to make the name unique. The name of the VM instance is also the name of the runner in the GitHub runner group. After the workflow job completed, the VM instance will be deleted again.
+Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization permission "Self-hosted runners". This PAT is needed to automatically create a shored lived [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) for each ephemeral runner to join the runner group of the Organization.
 
-## Configuration
+Then open the [Secret Manager](https://console.cloud.google.com/security/secret-manager) in the Google Cloud Console and add a new Version to the already existing secret "github-pat-token". Paste the PAT into the Secret value field and click "ADD NEW VERSION".
 
-Have a look at the [variables.tf](./variables.tf) file how to configure the Terraform module.
+That's it 👍
+
+As soon as you start a GitHub workflow, which contains a job with `runs-on: self-hosted` (or any other label you provided to the Terraform [module variable](./variables.tf) `github_runner_labels`), a VM instance (with the specified `machine_type`) starts. The name of the VM instance starts with the `github_runner_prefix`, which is followed by a random string to make the name unique. The name of the VM instance is also the name of the runner in the GitHub runner group. After the workflow job completed, the VM instance will be deleted again.
+
+## Advanced Configuration
+
+Have a look at the [variables.tf](./variables.tf) file how to further configure the Terraform module.
 
 > [!TIP]
 > To find the cheapest VM machine_type use this [table](https://gcloud-compute.com/instances.html) and sort by Spot instance cost. But remember that the price varies depending on the region.
@@ -74,18 +86,28 @@ Have a look at the [variables.tf](./variables.tf) file how to configure the Terr
 8. The Cloud task invokes the Cloud Run path `/delete_vm`.
 9. The Cloud Run deletes the VM instance.
 
+> [!NOTE]
+> The runner is run by the unprivileged user `agent` with the uid `10000`
+
 ## Troubleshooting
 
 #### Public access to Cloud Run disallowed
 
 The terraform error looks something like this:
 ```
-Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": Error setting IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": googleapi: Error 400: One or more users named in the policy do not belong to a permitted customer,  perhaps due to an organization policy
+Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": Error setting IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": googleapi: Error 400: One or more users named in the policy do not belong to a permitted customer, perhaps due to an Organization policy
 ```
 
 1. Solution: Use project tags: [How to create public Cloud Run services when Domain Restricted Sharing is enforced](https://cloud.google.com/blog/topics/developers-practitioners/how-create-public-cloud-run-services-when-domain-restricted-sharing-enforced?hl=en)
 
 2. Solution: Override the Organization Policy "Domain Restricted Sharing" in the project, by setting it to "Allow all".
+
+#### The VM Instance immediately stops after it was created without processing a workflow job
+
+The VM will shoutdown itself if the registration at the GitHub runner group fails. This can be caused by:
+* An invalid PAT or a PAT with insufficient permission. Check if the PAT has the Organization permission "Self-hosted runners" and is stored in the Secret Manager secret.
+* A typo in the GitHub Organization name. Check the Terraform variable `github_organization` for typos.
+* A not existing GitHub runner group within the Organization. Check the Terraform variable `github_runner_group` for typos.
 
 #### New VM Instance not starting (but a lot of instances are already running)
 

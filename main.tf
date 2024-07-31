@@ -38,3 +38,7 @@ resource "google_project_service" "artifactregistry_api" {
 resource "google_project_service" "cloudtasks_api" {
   service = "cloudtasks.googleapis.com"
 }
+
+resource "google_project_service" "secretmanager_api" {
+  service = "secretmanager.googleapis.com"
+}
