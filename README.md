@@ -108,7 +108,7 @@ A single 1 h long workflow job in europe-west1 leads to the following cost:
 ```
 Ephemeral external IPv4 for Spot instance $0.0025
 Spot VM Instance c2d-highcpu-8            $0.0494
-Standard persistent disk 40 GiB         ~ $0.0011
+Standard persistent disk 20 GiB used    ~ $0.0011
 -----------------------------------------------------
                                           $0.053
 ```
