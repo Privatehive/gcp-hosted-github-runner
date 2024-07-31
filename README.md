@@ -59,7 +59,7 @@ Have a look at the Terraform output `runner_webhook_config`. There you find the 
 
 #### 3. Provide PAT
 
-Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization permission "Self-hosted runners". This PAT is needed to automatically create a shored lived [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) for each ephemeral runner to join the runner group of the Organization.
+Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization Read/Write permission "Self-hosted runners". This PAT is needed to automatically create a shored lived [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) for each ephemeral runner to join the runner group of the Organization.
 
 Then open the [Secret Manager](https://console.cloud.google.com/security/secret-manager) in the Google Cloud Console and add a new Version to the already existing secret "github-pat-token". Paste the PAT into the Secret value field and click "ADD NEW VERSION".
 
@@ -105,7 +105,7 @@ Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/l
 #### The VM Instance immediately stops after it was created without processing a workflow job
 
 The VM will shoutdown itself if the registration at the GitHub runner group fails. This can be caused by:
-* An invalid/expired PAT or a PAT with insufficient permission. Check if the PAT is valid, has the Organization permission "Self-hosted runners" and is stored in the Secret Manager secret.
+* An invalid/expired PAT or a PAT with insufficient permission. Check if the PAT is valid, has the Organization Read/Write permission "Self-hosted runners" and is stored in the Secret Manager secret.
 * A typo in the GitHub Organization name. Check the Terraform variable `github_organization` for typos.
 * A not existing GitHub runner group within the Organization. Check the Terraform variable `github_runner_group` for typos.
 
