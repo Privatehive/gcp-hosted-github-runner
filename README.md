@@ -105,7 +105,7 @@ Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/l
 #### The VM Instance immediately stops after it was created without processing a workflow job
 
 The VM will shoutdown itself if the registration at the GitHub runner group fails. This can be caused by:
-* An invalid PAT or a PAT with insufficient permission. Check if the PAT has the Organization permission "Self-hosted runners" and is stored in the Secret Manager secret.
+* An invalid/expired PAT or a PAT with insufficient permission. Check if the PAT is valid, has the Organization permission "Self-hosted runners" and is stored in the Secret Manager secret.
 * A typo in the GitHub Organization name. Check the Terraform variable `github_organization` for typos.
 * A not existing GitHub runner group within the Organization. Check the Terraform variable `github_runner_group` for typos.
 
