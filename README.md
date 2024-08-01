@@ -77,14 +77,15 @@ Have a look at the [variables.tf](./variables.tf) file how to further configure 
 ## How it works
 
 1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/github-runner-autoscaler) with path `/webhook`
-2. The Cloud run enqueues a "create-vm" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
+2. The Cloud run enqueues a "create-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
 3. The Cloud task invokes the Cloud Run path `/create_vm`.
-4. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default)
-5. In the startup script of the VM instance the PAT is used to generate a runner token. With the token the VM registers itself as an **ephemeral** runner in the runner group and immediately starts working on the workflow job.
-6. As soon as the workflow job completed, the GitHub webhook event "Workflow jobs" invokes the Cloud Run again.
-7. The Cloud run enqueues a "delete-vm" Cloud Task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
-8. The Cloud task invokes the Cloud Run path `/delete_vm`.
-9. The Cloud Run deletes the VM instance.
+4. The Cloud Run creates a runner registration token (using PAT from Secret Manager).
+5. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default) and provides it with the runner registration token via custom metadata attribute.
+6. Using the registration token the VM registers itself as an **ephemeral** runner in the runner group and immediately starts working on the workflow job.
+7. As soon as the workflow job completed, the GitHub webhook event "Workflow jobs" invokes the Cloud Run again.
+8. The Cloud run enqueues a "delete-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
+9. The Cloud task invokes the Cloud Run path `/delete_vm`.
+10. The Cloud Run deletes the VM instance.
 
 > [!NOTE]
 > The runner is run by the unprivileged user `agent` with the uid `10000` and gid `10000`
@@ -131,7 +132,7 @@ Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/l
 #### The VM Instance immediately stops after it was created without processing a workflow job
 
 The VM will shoutdown itself if the registration at the GitHub runner group fails. This can be caused by:
-* An invalid/expired PAT or a PAT with insufficient permission. Check if the PAT is valid, has the Organization Read/Write permission "Self-hosted runners" and is stored in the Secret Manager secret.
+* An invalid/expired runner registration token.
 * A typo in the GitHub Organization name. Check the Terraform variable `github_organization` for typos.
 * A not existing GitHub runner group within the Organization. Check the Terraform variable `github_runner_group` for typos.
 
