@@ -11,12 +11,13 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	taskspb "cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
 	compute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	ginlogrus "github.com/toorop/gin-logrus"
@@ -25,12 +26,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const SHA_PREFIX = "sha256="
-const SHA_HEADER = "x-hub-signature-256"
-const EVENT_HEADER = "x-github-event"
+const SHA_PREFIX string = "sha256="
+const SHA_HEADER string = "x-hub-signature-256"
+const EVENT_HEADER string = "x-github-event"
 
-const WEBHOOK_PING_EVENT = "ping"
-const WEBHOOK_JOB_EVENT = "workflow_job"
+const WEBHOOK_PING_EVENT string = "ping"
+const WEBHOOK_JOB_EVENT string = "workflow_job"
+
+const RUNNER_REGISTRATION_TOKEN_ATTR string = "registration_token"
+
+const RUNNER_REGISTER_TOKEN_ORG_ENDPOINT string = "https://api.github.com/orgs/%s/actions/runners/registration-token"
 
 type Job struct {
 	Id              int64    `json:"id"`
@@ -113,10 +118,8 @@ func createCallbackUrl(ctx *gin.Context, path string) string {
 	return "https://" + ctx.Request.Host + path
 }
 
-func newComputeClient() *InstanceClient {
+func newComputeClient(ctx context.Context) *InstanceClient {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	if client, err := compute.NewInstancesRESTClient(ctx); err != nil {
 		panic(err)
 	} else {
@@ -124,11 +127,18 @@ func newComputeClient() *InstanceClient {
 	}
 }
 
-func newTaskClient() *cloudtasks.Client {
+func newTaskClient(ctx context.Context) *cloudtasks.Client {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	if client, err := cloudtasks.NewClient(ctx); err != nil {
+		panic(err)
+	} else {
+		return client
+	}
+}
+
+func newSecretAccessClient(ctx context.Context) *secretmanager.Client {
+
+	if client, err := secretmanager.NewClient(ctx); err != nil {
 		panic(err)
 	} else {
 		return client
@@ -172,9 +182,11 @@ func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, error) {
 	return nil, fmt.Errorf("unauthorized")
 }
 
-func (s *Autoscaler) getInstanceState(ctx context.Context, instanceName string) (State, error) {
+func (s *Autoscaler) GetInstanceState(ctx context.Context, instanceName string) (State, error) {
 
-	if res, err := s.c.Get(ctx, &computepb.GetInstanceRequest{
+	client := newComputeClient(ctx)
+	defer client.Close()
+	if res, err := client.Get(ctx, &computepb.GetInstanceRequest{
 		Project:  s.conf.ProjectId,
 		Zone:     s.conf.Zone,
 		Instance: instanceName,
@@ -190,10 +202,12 @@ func (s *Autoscaler) getInstanceState(ctx context.Context, instanceName string) 
 }
 
 // blocking until instance started or failed to start
-func (s *Autoscaler) startInstance(ctx context.Context, instanceName string) error {
+func (s *Autoscaler) StartInstance(ctx context.Context, instanceName string) error {
 
 	log.Infof("About to start instance: %s", instanceName)
-	if res, err := s.c.Start(ctx, &computepb.StartInstanceRequest{
+	client := newComputeClient(ctx)
+	defer client.Close()
+	if res, err := client.Start(ctx, &computepb.StartInstanceRequest{
 		Project:  s.conf.ProjectId,
 		Zone:     s.conf.Zone,
 		Instance: instanceName,
@@ -212,10 +226,12 @@ func (s *Autoscaler) startInstance(ctx context.Context, instanceName string) err
 }
 
 // blocking until instance stopped or failed to stop
-func (s *Autoscaler) stopInstance(ctx context.Context, instanceName string) error {
+func (s *Autoscaler) StopInstance(ctx context.Context, instanceName string) error {
 
-	log.Infof("About to stop instance: %s", instanceName)
-	if res, err := s.c.Stop(ctx, &computepb.StopInstanceRequest{
+	log.Debugf("About to stop instance: %s", instanceName)
+	client := newComputeClient(ctx)
+	defer client.Close()
+	if res, err := client.Stop(ctx, &computepb.StopInstanceRequest{
 		Project:  s.conf.ProjectId,
 		Zone:     s.conf.Zone,
 		Instance: instanceName,
@@ -234,10 +250,12 @@ func (s *Autoscaler) stopInstance(ctx context.Context, instanceName string) erro
 }
 
 // blocking until instance started or failed to start
-func (s *Autoscaler) deleteInstance(ctx context.Context, instanceName string) error {
+func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) error {
 
-	log.Infof("About to delete instance: %s", instanceName)
-	if res, err := s.c.Delete(ctx, &computepb.DeleteInstanceRequest{
+	log.Debugf("About to delete instance: %s", instanceName)
+	client := newComputeClient(ctx)
+	defer client.Close()
+	if res, err := client.Delete(ctx, &computepb.DeleteInstanceRequest{
 		Project:  s.conf.ProjectId,
 		Zone:     s.conf.Zone,
 		Instance: instanceName,
@@ -256,13 +274,19 @@ func (s *Autoscaler) deleteInstance(ctx context.Context, instanceName string) er
 }
 
 // blocking until instance started or failed to start
-func (s *Autoscaler) createInstanceFromTemplate(ctx context.Context, instanceName string) error {
+func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceName string, metadata ...*computepb.Items) error {
 
-	if res, err := s.c.Insert(ctx, &computepb.InsertInstanceRequest{
+	log.Debugf("About to create instance %s from template", instanceName)
+	computeClient := newComputeClient(ctx)
+	defer computeClient.Close()
+	if res, err := computeClient.Insert(ctx, &computepb.InsertInstanceRequest{
 		Project: s.conf.ProjectId,
 		Zone:    s.conf.Zone,
 		InstanceResource: &computepb.Instance{
 			Name: proto.String(instanceName),
+			Metadata: &computepb.Metadata{
+				Items: metadata,
+			},
 		},
 		SourceInstanceTemplate: &s.conf.InstanceTemplate,
 	}); err != nil {
@@ -279,7 +303,56 @@ func (s *Autoscaler) createInstanceFromTemplate(ctx context.Context, instanceNam
 	return nil
 }
 
-func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, message string) (*taskspb.Task, error) {
+func (s *Autoscaler) GenerateRunnerRegistrationToken(ctx context.Context) (string, error) {
+
+	log.Debugf("About to request GitHub runner registration token using PAT from secret version: %s", s.conf.SecretVersion)
+	secretAccessClient := newSecretAccessClient(ctx)
+	defer secretAccessClient.Close()
+	if secretResult, err := secretAccessClient.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
+		Name: s.conf.SecretVersion,
+	}); err != nil {
+		log.Errorf("Could not access GitHub PAT secret version %s: %s", s.conf.SecretVersion, err.Error())
+		return "", fmt.Errorf("missing GitHub PAT")
+	} else {
+		if pat := string(secretResult.Payload.Data); len(pat) == 0 {
+			log.Errorf("The GitHub PAT secret is empty")
+			return "", fmt.Errorf("empty GitHub PAT")
+		} else {
+			if req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf(RUNNER_REGISTER_TOKEN_ORG_ENDPOINT, s.conf.GitHubOrg), nil); err != nil {
+				log.Errorf("Could not create GitHub runner registration token request")
+				return "", fmt.Errorf("failed registration token request")
+			} else {
+				req.Header.Add("Accept", "application/vnd.github+json")
+				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", pat))
+				req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
+				req.Header.Add("User-Agent", "github-runner-autoscaler")
+				if resp, err := http.DefaultClient.Do(req); err != nil {
+					log.Errorf("GitHub runner registration token request failed: %s", err.Error())
+					return "", fmt.Errorf("failed registration token response")
+				} else if resp.StatusCode != 201 {
+					log.Errorf("GitHub runner registration token request unsuccessful: %s", resp.Status)
+					defer resp.Body.Close()
+					return "", fmt.Errorf("failed registration token response")
+				} else {
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					payload := map[string]string{}
+					if err := json.Unmarshal(body, &payload); err != nil {
+						log.Errorf("GitHub runner registration token response missing: %s", err.Error())
+						return "", fmt.Errorf("failed registration token response")
+					} else if token, ok := payload["token"]; ok && len(token) > 0 {
+						return token, nil
+					} else {
+						log.Errorf("GitHub runner registration token is empty")
+						return "", fmt.Errorf("failed registration token response")
+					}
+				}
+			}
+		}
+	}
+}
+
+func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, message string) error {
 
 	now := timestamppb.Now()
 	now.Seconds += 1 // delay the callback a little bit
@@ -305,24 +378,33 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 
 	req.Task.GetHttpRequest().Body = []byte(message)
 
-	createdTask, err := s.t.CreateTask(ctx, req)
+	client := newTaskClient(ctx)
+	defer client.Close()
+	_, err := client.CreateTask(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("cloudtasks.CreateTask failed: %v", err)
+		return fmt.Errorf("cloudtasks.CreateTask failed: %v", err)
 	} else {
 		log.Infof("Created cloud task callback with url \"%s\" and payload \"%s\"", url, message)
 	}
 
-	return createdTask, nil
+	return nil
 }
 
 func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 
 	log.Info("Received create-vm cloud task callback")
 	if data, err := s.verifySignature(ctx); err == nil {
-		if err := s.createInstanceFromTemplate(ctx, string(data)); err != nil {
+		if token, err := s.GenerateRunnerRegistrationToken(ctx); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
-			ctx.Status(http.StatusOK)
+			if err := s.CreateInstanceFromTemplate(ctx, string(data), &computepb.Items{
+				Key:   proto.String(RUNNER_REGISTRATION_TOKEN_ATTR),
+				Value: proto.String(token),
+			}); err != nil {
+				ctx.AbortWithError(http.StatusInternalServerError, err)
+			} else {
+				ctx.Status(http.StatusOK)
+			}
 		}
 	}
 }
@@ -331,7 +413,7 @@ func (s *Autoscaler) handleDeleteVm(ctx *gin.Context) {
 
 	log.Info("Received delete-vm cloud task callback")
 	if data, err := s.verifySignature(ctx); err == nil {
-		if err := s.deleteInstance(ctx, string(data)); err != nil {
+		if err := s.DeleteInstance(ctx, string(data)); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
 			ctx.Status(http.StatusOK)
@@ -357,7 +439,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				if payload.Action == QUEUED {
 					if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
 						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateVm)
-						if _, err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, randStringRunes(10))); err != nil {
+						if err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, randStringRunes(10))); err != nil {
 							log.Errorf("Can not enqueue create-vm cloud task callback: %s", err.Error())
 							ctx.AbortWithError(http.StatusInternalServerError, err)
 							return
@@ -369,7 +451,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 					if payload.Job.RunnerGroupName == s.conf.RunnerGroup {
 						if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
 							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm)
-							if _, err := s.createCallbackTaskWithToken(ctx, deleteUrl, payload.Job.RunnerName); err != nil {
+							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, payload.Job.RunnerName); err != nil {
 								log.Errorf("Can not enqueue delete-vm cloud task callback: %s", err.Error())
 								ctx.AbortWithError(http.StatusInternalServerError, err)
 								return
@@ -399,25 +481,24 @@ type AutoscalerConfig struct {
 	Zone             string
 	TaskQueue        string
 	InstanceTemplate string
+	SecretVersion    string
 	RunnerPrefix     string
 	RunnerGroup      string
 	RunnerLabels     []string
+	GitHubOrg        string
 }
 
 type Autoscaler struct {
 	engine *gin.Engine
-	c      *InstanceClient
-	t      *cloudtasks.Client
 	conf   AutoscalerConfig
 }
 
 func NewAutoscaler(config AutoscalerConfig) Autoscaler {
 
 	engine := gin.New()
+
 	scaler := Autoscaler{
 		engine: engine,
-		c:      newComputeClient(),
-		t:      newTaskClient(),
 		conf:   config,
 	}
 	engine.Use(ginlogrus.Logger(log.WithFields(log.Fields{})))

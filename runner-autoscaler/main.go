@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Tereius/gcp-hosted-github-runner/pkg"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -28,20 +29,30 @@ func mustGetEnv(name string) string {
 
 func main() {
 
+	logrus.SetFormatter(&logrus.JSONFormatter{
+		DisableTimestamp: true,
+		FieldMap: logrus.FieldMap{
+			logrus.FieldKeyLevel: "severity",
+		},
+	})
+	logrus.SetLevel(logrus.InfoLevel)
+
 	labels := strings.Split(getEnvDefault("RUNNER_LABELS", "self-hosted"), ",")
 	runnerGroup := getEnvDefault("RUNNER_GROUP", "Default")
 	scaler := pkg.NewAutoscaler(pkg.AutoscalerConfig{
 		RouteWebhook:     getEnvDefault("ROUTE_WEBHOOK", "/webhook"),
-		RouteCreateVm:    getEnvDefault("ROUTE_CREATE_VM", "/create_vm"),
 		RouteDeleteVm:    getEnvDefault("ROUTE_DELETE_VM", "/delete_vm"),
+		RouteCreateVm:    getEnvDefault("ROUTE_CREATE_VM", "/create_vm"),
 		WebhookSecret:    getEnvDefault("WEBHOOK_SECRET", ""),
 		ProjectId:        mustGetEnv("PROJECT_ID"),
 		Zone:             mustGetEnv("ZONE"),
 		TaskQueue:        mustGetEnv("TASK_QUEUE"),
 		InstanceTemplate: mustGetEnv("INSTANCE_TEMPLATE"),
+		SecretVersion:    mustGetEnv("SECRET_VERSION"),
 		RunnerPrefix:     getEnvDefault("RUNNER_PREFIX", "runner"),
 		RunnerGroup:      runnerGroup,
 		RunnerLabels:     labels,
+		GitHubOrg:        mustGetEnv("GITHUB_ORG"),
 	})
 
 	if len(labels) == 0 {

@@ -44,7 +44,7 @@ resource "google_compute_instance_template" "runner_instance" {
   metadata_startup_script = <<EOT
 #!/bin/bash
 echo "Setup of agent '$(hostname)' started"
-apt-get update && apt-get -y install docker.io docker-buildx jq curl
+apt-get update && apt-get -y install docker.io docker-buildx curl
 useradd -d /home/agent -u 10000 agent
 usermod -aG docker agent
 newgrp docker
@@ -53,9 +53,8 @@ mkdir -p /home/agent
 chown -R agent:agent /home/agent
 pushd /home/agent
 sudo -u agent tar zxf /tmp/agent.tar.gz
-pat=$(gcloud secrets versions access latest --secret="${google_secret_manager_secret.github_pat_token.secret_id}")
-register_token=$(curl -s -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $pat" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/orgs/${var.github_organization}/actions/runners/registration-token | jq -r .token)
-sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) ${local.runnerLabelInstanceTemplate} --url 'https://github.com/${var.github_organization}' --token $${register_token} --runnergroup '${var.github_runner_group}' || shutdown now
+registration_token=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/registration_token" -H "Metadata-Flavor: Google")
+sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) ${local.runnerLabelInstanceTemplate} --url 'https://github.com/${var.github_organization}' --token $${registration_token} --runnergroup '${var.github_runner_group}' || shutdown now
 ./bin/installdependencies.sh || shutdown now
 ./svc.sh install agent || shutdown now
 ./svc.sh start || shutdown now

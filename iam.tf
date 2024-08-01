@@ -10,28 +10,11 @@ resource "google_project_iam_member" "cloud_run_member" {
   role       = each.key
 }
 
-// ---- allow default compute-sa to access pat secret
+// ---- github-runner-sa ----
 
 resource "google_service_account" "github_runner_sa" {
   account_id   = "github-runner-sa"
   display_name = "GitHub runner sa"
-}
-
-resource "google_project_iam_custom_role" "read_secret_version" {
-  role_id     = "AccessSecretVersion"
-  title       = "Access a secret payload"
-  permissions = ["secretmanager.versions.access"]
-}
-
-resource "google_project_iam_member" "read_secret_version_member" {
-  project = local.projectId
-  member  = "serviceAccount:${google_service_account.github_runner_sa.email}"
-  role    = google_project_iam_custom_role.read_secret_version.id
-  condition {
-    title       = "Read secret: ${google_secret_manager_secret.github_pat_token.secret_id}"
-    // The project number is needed - project id doesn't work
-    expression  = "resource.name == 'projects/${local.projectNumber}/secrets/${google_secret_manager_secret.github_pat_token.secret_id}/versions/latest'"
-  }
 }
 
 // ---- autoscaler-sa ----
@@ -71,13 +54,19 @@ resource "google_project_iam_custom_role" "subnetwork_use" {
   permissions = ["compute.subnetworks.use", "compute.subnetworks.useExternalIp"]
 }
 
+resource "google_project_iam_custom_role" "read_secret_version" {
+  role_id     = "AccessSecretVersion"
+  title       = "Access a secret payload"
+  permissions = ["secretmanager.versions.access"]
+}
+
 // ---- autoscaler-sa roles member ----
 resource "google_project_iam_member" "manage_vm_instances_member" {
   project = local.projectId
   member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
   role    = google_project_iam_custom_role.manage_vm_instances.id
   condition {
-    title       = "VM instance administration with a fix prefix: ${var.github_runner_prefix}"
+    title       = "VM instance administration with a fix prefix ${var.github_runner_prefix}"
     expression  = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zone}/instances/${var.github_runner_prefix}-')"
   }
 }
@@ -108,7 +97,7 @@ resource "google_project_iam_member" "create_vm_from_instance_template_member" {
   member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
   role    = google_project_iam_custom_role.create_vm_from_instance_template.id
   condition {
-    title       = "Create VM instance from instance template: ${google_compute_instance_template.runner_instance.name}"
+    title       = "Create VM instance from instance template ${google_compute_instance_template.runner_instance.name}"
     expression  = "resource.name == '${google_compute_instance_template.runner_instance.id}'"
   }
 }
@@ -118,7 +107,7 @@ resource "google_project_iam_member" "create_disk_member" {
   member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
   role    = google_project_iam_custom_role.create_disk.id
   condition {
-    title      = "Create disk with a fix prefix: ${var.github_runner_prefix}"
+    title      = "Create disk with a fix prefix ${var.github_runner_prefix}"
     expression = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zone}/disks/${var.github_runner_prefix}-')"
   }
 }
@@ -130,6 +119,17 @@ resource "google_project_iam_member" "subnetwork_use_member" {
   condition {
     title      = "Use Subnetwork ${google_compute_subnetwork.subnetwork.name}"
     expression = "resource.name == '${google_compute_subnetwork.subnetwork.id}'"
+  }
+}
+
+resource "google_project_iam_member" "read_secret_version_member" {
+  project = local.projectId
+  member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
+  role    = google_project_iam_custom_role.read_secret_version.id
+  condition {
+    title       = "Read secret ${google_secret_manager_secret.github_pat_token.secret_id}"
+    // The project number is needed - project id doesn't work
+    expression  = "resource.name == 'projects/${local.projectNumber}/secrets/${google_secret_manager_secret.github_pat_token.secret_id}/versions/latest'"
   }
 }
 // -----------------------------

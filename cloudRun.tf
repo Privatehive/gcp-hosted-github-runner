@@ -20,6 +20,14 @@ resource "google_cloud_run_v2_service" "autoscaler" {
     containers {
       image = "${local.region}-docker.pkg.dev/${local.projectId}/${google_artifact_registry_repository.ghcr.name}/privatehive/github-runner-autoscaler:latest"
       env {
+        name  = "ROUTE_WEBHOOK"
+        value = local.webhookUrl
+      }
+      env {
+        name  = "WEBHOOK_SECRET"
+        value = random_password.webhook_secret.result
+      }
+      env {
         name  = "PROJECT_ID"
         value = local.projectId
       }
@@ -36,6 +44,10 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         value = google_compute_instance_template.runner_instance.id
       }
       env {
+        name  = "SECRET_VERSION"
+        value = google_secret_manager_secret.github_pat_token.id
+      }
+      env {
         name  = "RUNNER_PREFIX"
         value = var.github_runner_prefix
       }
@@ -48,12 +60,8 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         value = local.runnerLabel
       }
       env {
-        name  = "WEBHOOK_SECRET"
-        value = random_password.webhook_secret.result
-      }
-      env {
-        name  = "ROUTE_WEBHOOK"
-        value = local.webhookUrl
+        name  = "GITHUB_ORG"
+        value = var.github_organization
       }
       dynamic "env" {
         for_each = var.enable_debug ? [0] : []
