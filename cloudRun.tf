@@ -45,7 +45,7 @@ resource "google_cloud_run_v2_service" "autoscaler" {
       }
       env {
         name  = "SECRET_VERSION"
-        value = google_secret_manager_secret.github_pat_token.id
+        value = "${google_secret_manager_secret.github_pat_token.id}/versions/latest"
       }
       env {
         name  = "RUNNER_PREFIX"

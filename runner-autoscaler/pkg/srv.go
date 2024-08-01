@@ -34,6 +34,7 @@ const WEBHOOK_PING_EVENT string = "ping"
 const WEBHOOK_JOB_EVENT string = "workflow_job"
 
 const RUNNER_REGISTRATION_TOKEN_ATTR string = "registration_token"
+const RUNNER_STARTUP_SCRIPT_ATTR string = "startup_script_register_runner"
 
 const RUNNER_REGISTER_TOKEN_ORG_ENDPOINT string = "https://api.github.com/orgs/%s/actions/runners/registration-token"
 
@@ -279,6 +280,7 @@ func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceNam
 	log.Debugf("About to create instance %s from template", instanceName)
 	computeClient := newComputeClient(ctx)
 	defer computeClient.Close()
+
 	if res, err := computeClient.Insert(ctx, &computepb.InsertInstanceRequest{
 		Project: s.conf.ProjectId,
 		Zone:    s.conf.Zone,
@@ -400,6 +402,14 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 			if err := s.CreateInstanceFromTemplate(ctx, string(data), &computepb.Items{
 				Key:   proto.String(RUNNER_REGISTRATION_TOKEN_ATTR),
 				Value: proto.String(token),
+			}, &computepb.Items{
+				Key: proto.String(RUNNER_STARTUP_SCRIPT_ATTR),
+				Value: proto.String(fmt.Sprintf(`
+#!/bin/bash
+curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/%s" -H "Metadata-Flavor: Google" > runner_startup.sh
+chmod +x runner_startup.sh
+./runner_startup.sh
+`, RUNNER_STARTUP_SCRIPT_ATTR)),
 			}); err != nil {
 				ctx.AbortWithError(http.StatusInternalServerError, err)
 			} else {

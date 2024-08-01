@@ -38,10 +38,11 @@ resource "google_compute_instance_template" "runner_instance" {
       }
     }
   }
+}
 
-  # show log: sudo journalctl -u google-startup-scripts.service
-  # run again: sudo google_metadata_script_runner startup
-  metadata_startup_script = <<EOT
+resource "google_compute_project_metadata_item" "startup_scripts_register_runner" {
+  key   = "startup_script_register_runner"
+  value = <<EOT
 #!/bin/bash
 echo "Setup of agent '$(hostname)' started"
 apt-get update && apt-get -y install docker.io docker-buildx curl
