@@ -404,7 +404,7 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 				Key:   proto.String(registration_token_attr),
 				Value: proto.String(token),
 			}, &computepb.Items{
-				Key: proto.String(RUNNER_STARTUP_SCRIPT_ATTR),
+				Key: proto.String("startup-script"),
 				Value: proto.String(fmt.Sprintf(`
 #!/bin/bash
 registration_token=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/%s" -H "Metadata-Flavor: Google")
