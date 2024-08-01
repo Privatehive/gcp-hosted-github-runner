@@ -399,17 +399,20 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 		if token, err := s.GenerateRunnerRegistrationToken(ctx); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
+			registration_token_attr := fmt.Sprintf("%s_%s", RUNNER_REGISTRATION_TOKEN_ATTR, randStringRunes(16))
 			if err := s.CreateInstanceFromTemplate(ctx, string(data), &computepb.Items{
-				Key:   proto.String(RUNNER_REGISTRATION_TOKEN_ATTR),
+				Key:   proto.String(registration_token_attr),
 				Value: proto.String(token),
 			}, &computepb.Items{
 				Key: proto.String(RUNNER_STARTUP_SCRIPT_ATTR),
 				Value: proto.String(fmt.Sprintf(`
 #!/bin/bash
-curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/%s" -H "Metadata-Flavor: Google" > runner_startup.sh
-chmod +x runner_startup.sh
-./runner_startup.sh
-`, RUNNER_STARTUP_SCRIPT_ATTR)),
+registration_token=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/%s" -H "Metadata-Flavor: Google")
+curl "http://metadata.google.internal/computeMetadata/v1/project/attributes/%s" -H "Metadata-Flavor: Google" > runner_startup.sh
+chmod +x ./runner_startup.sh
+./runner_startup.sh $registration_token
+rm runner_startup.sh
+`, registration_token_attr, RUNNER_STARTUP_SCRIPT_ATTR)),
 			}); err != nil {
 				ctx.AbortWithError(http.StatusInternalServerError, err)
 			} else {

@@ -54,7 +54,7 @@ mkdir -p /home/agent
 chown -R agent:agent /home/agent
 pushd /home/agent
 sudo -u agent tar zxf /tmp/agent.tar.gz
-registration_token=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/registration_token" -H "Metadata-Flavor: Google")
+registration_token=$1
 sudo -u agent ./config.sh --unattended --disableupdate --ephemeral --name $(hostname) ${local.runnerLabelInstanceTemplate} --url 'https://github.com/${var.github_organization}' --token $${registration_token} --runnergroup '${var.github_runner_group}' || shutdown now
 ./bin/installdependencies.sh || shutdown now
 ./svc.sh install agent || shutdown now
