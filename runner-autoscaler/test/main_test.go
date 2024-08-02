@@ -34,7 +34,8 @@ func init() {
 		InstanceTemplate: "projects/" + PROJECT_ID + "/global/instanceTemplates/ephemeral-github-runner",
 		SecretVersion:    "projects/" + PROJECT_ID + "/secrets/github-pat-token/versions/latest",
 		RunnerPrefix:     "runner",
-		RunnerGroup:      "Default",
+		RunnerGroupName:  "Default",
+		RunnerGroupId:    1,
 		RunnerLabels:     []string{"self-hosted"},
 		GitHubOrg:        GIT_HUB_ORG,
 	})
@@ -43,7 +44,7 @@ func init() {
 
 func TestWebhookSignature(t *testing.T) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://127.0.0.1:%d/webhook", PORT), strings.NewReader("Hello, World!"))
 	req.Header.Add("x-hub-signature-256", "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17")
@@ -55,9 +56,18 @@ func TestWebhookSignature(t *testing.T) {
 
 func TestGenerateRunnerRegistrationToken(t *testing.T) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	token, err := scaler.GenerateRunnerRegistrationToken(ctx)
 	assert.Nil(t, err)
 	assert.NotEmpty(t, token)
+}
+
+func TestGenerateRunnerJitConfig(t *testing.T) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	jitConfig, err := scaler.GenerateRunnerJitConfig(ctx, "unit_test_test_runner_"+pkg.RandStringRunes(10))
+	assert.Nil(t, err)
+	assert.NotEmpty(t, jitConfig)
 }

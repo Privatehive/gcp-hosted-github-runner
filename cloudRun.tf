@@ -52,8 +52,12 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         value = var.github_runner_prefix
       }
       env {
-        name  = "RUNNER_GROUP"
-        value = var.github_runner_group
+        name  = "RUNNER_GROUP_NAME"
+        value = var.github_runner_group_name
+      }
+      env {
+        name  = "RUNNER_GROUP_ID"
+        value = var.github_runner_group_id
       }
       env {
         name  = "RUNNER_LABELS"

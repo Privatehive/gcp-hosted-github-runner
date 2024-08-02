@@ -39,10 +39,16 @@ variable "github_organization" {
   description = "The name of the GitHub organization the runner will join"
 }
 
-variable "github_runner_group" {
+variable "github_runner_group_name" {
   type        = string
   description = "The name of the GitHub runner group the runner will join"
   default     = "Default"
+}
+
+variable "github_runner_group_id" {
+  type        = number
+  description = "The ID of the GitHub runner group the runner will join (must be the same group with name var.github_runner_group_name). If this value is greater 0 then a jit config is used for runner registration. Otherwise a registration token is used!"
+  default     = 0
 }
 
 variable "github_runner_labels" {

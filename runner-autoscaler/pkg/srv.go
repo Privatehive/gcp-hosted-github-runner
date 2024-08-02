@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -26,6 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const GITHUB_API_VERSION string = "2022-11-28"
 const SHA_PREFIX string = "sha256="
 const SHA_HEADER string = "x-hub-signature-256"
 const EVENT_HEADER string = "x-github-event"
@@ -34,9 +36,13 @@ const WEBHOOK_PING_EVENT string = "ping"
 const WEBHOOK_JOB_EVENT string = "workflow_job"
 
 const RUNNER_REGISTRATION_TOKEN_ATTR string = "registration_token"
-const RUNNER_STARTUP_SCRIPT_ATTR string = "startup_script_register_runner"
+const RUNNER_JIT_CONFIG_ATTR string = "jit_config"
+
+const RUNNER_SCRIPT_REGISTER_RUNNER_ATTR string = "startup_script_register_runner"         // has to match the global custom metadata in compute.tf
+const RUNNER_SCRIPT_REGISTER_JIT_RUNNER_ATTR string = "startup_script_register_jit_runner" // has to match the global custom metadata in compute.tf
 
 const RUNNER_REGISTER_TOKEN_ORG_ENDPOINT string = "https://api.github.com/orgs/%s/actions/runners/registration-token"
+const RUNNER_JIT_CONFIG_ENDPOINT string = "https://api.github.com/orgs/%s/actions/runners/generate-jitconfig"
 
 type Job struct {
 	Id              int64    `json:"id"`
@@ -148,7 +154,7 @@ func newSecretAccessClient(ctx context.Context) *secretmanager.Client {
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz")
 
-func randStringRunes(n int) string {
+func RandStringRunes(n int) string {
 
 	b := make([]rune, n)
 	for i := range b {
@@ -305,7 +311,7 @@ func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceNam
 	return nil
 }
 
-func (s *Autoscaler) GenerateRunnerRegistrationToken(ctx context.Context) (string, error) {
+func (s *Autoscaler) readPat(ctx context.Context) (string, error) {
 
 	log.Debugf("About to request GitHub runner registration token using PAT from secret version: %s", s.conf.SecretVersion)
 	secretAccessClient := newSecretAccessClient(ctx)
@@ -320,34 +326,93 @@ func (s *Autoscaler) GenerateRunnerRegistrationToken(ctx context.Context) (strin
 			log.Errorf("The GitHub PAT secret is empty")
 			return "", fmt.Errorf("empty GitHub PAT")
 		} else {
-			if req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf(RUNNER_REGISTER_TOKEN_ORG_ENDPOINT, s.conf.GitHubOrg), nil); err != nil {
-				log.Errorf("Could not create GitHub runner registration token request")
-				return "", fmt.Errorf("failed registration token request")
+			return pat, nil
+		}
+	}
+}
+
+func (s *Autoscaler) GenerateRunnerRegistrationToken(ctx context.Context) (string, error) {
+
+	log.Debugf("About to request GitHub runner registration token using PAT from secret version: %s", s.conf.SecretVersion)
+	secretAccessClient := newSecretAccessClient(ctx)
+	defer secretAccessClient.Close()
+	if pat, err := s.readPat(ctx); err != nil {
+		return "", err
+	} else {
+		if req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf(RUNNER_REGISTER_TOKEN_ORG_ENDPOINT, s.conf.GitHubOrg), nil); err != nil {
+			log.Errorf("Could not create GitHub runner registration token request")
+			return "", fmt.Errorf("failed registration token request")
+		} else {
+			req.Header.Add("Accept", "application/vnd.github+json")
+			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", pat))
+			req.Header.Add("X-GitHub-Api-Version", GITHUB_API_VERSION)
+			req.Header.Add("User-Agent", "github-runner-autoscaler")
+			if resp, err := http.DefaultClient.Do(req); err != nil {
+				log.Errorf("GitHub runner registration token request failed: %s", err.Error())
+				return "", fmt.Errorf("failed registration token response")
+			} else if resp.StatusCode != 201 {
+				log.Errorf("GitHub runner registration token request unsuccessful: %s", resp.Status)
+				defer resp.Body.Close()
+				return "", fmt.Errorf("failed registration token response")
 			} else {
-				req.Header.Add("Accept", "application/vnd.github+json")
-				req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", pat))
-				req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
-				req.Header.Add("User-Agent", "github-runner-autoscaler")
-				if resp, err := http.DefaultClient.Do(req); err != nil {
-					log.Errorf("GitHub runner registration token request failed: %s", err.Error())
+				defer resp.Body.Close()
+				body, _ := io.ReadAll(resp.Body)
+				payload := map[string]string{}
+				if err := json.Unmarshal(body, &payload); err != nil {
+					log.Errorf("GitHub runner registration token response missing: %s", err.Error())
 					return "", fmt.Errorf("failed registration token response")
-				} else if resp.StatusCode != 201 {
-					log.Errorf("GitHub runner registration token request unsuccessful: %s", resp.Status)
-					defer resp.Body.Close()
-					return "", fmt.Errorf("failed registration token response")
+				} else if token, ok := payload["token"]; ok && len(token) > 0 {
+					return token, nil
 				} else {
-					defer resp.Body.Close()
-					body, _ := io.ReadAll(resp.Body)
-					payload := map[string]string{}
-					if err := json.Unmarshal(body, &payload); err != nil {
-						log.Errorf("GitHub runner registration token response missing: %s", err.Error())
-						return "", fmt.Errorf("failed registration token response")
-					} else if token, ok := payload["token"]; ok && len(token) > 0 {
-						return token, nil
-					} else {
-						log.Errorf("GitHub runner registration token is empty")
-						return "", fmt.Errorf("failed registration token response")
-					}
+					log.Errorf("GitHub runner registration token is empty")
+					return "", fmt.Errorf("failed registration token response")
+				}
+			}
+		}
+	}
+}
+
+func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, runnerName string) (string, error) {
+
+	log.Debugf("About to request GitHub runner jit config using PAT from secret version: %s", s.conf.SecretVersion)
+	secretAccessClient := newSecretAccessClient(ctx)
+	defer secretAccessClient.Close()
+	if pat, err := s.readPat(ctx); err != nil {
+		return "", err
+	} else {
+		reqPayload := map[string]any{}
+		reqPayload["name"] = runnerName
+		reqPayload["runner_group_id"] = s.conf.RunnerGroupId
+		reqPayload["labels"] = s.conf.RunnerLabels
+		reqPayload["work_folder"] = "_work"
+		data, _ := json.Marshal(reqPayload)
+		if req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf(RUNNER_JIT_CONFIG_ENDPOINT, s.conf.GitHubOrg), bytes.NewReader(data)); err != nil {
+			log.Errorf("Could not create GitHub runner jit-config request")
+			return "", fmt.Errorf("failed jit-config request")
+		} else {
+			req.Header.Add("Accept", "application/vnd.github+json")
+			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", pat))
+			req.Header.Add("X-GitHub-Api-Version", GITHUB_API_VERSION)
+			req.Header.Add("User-Agent", "github-runner-autoscaler")
+			if resp, err := http.DefaultClient.Do(req); err != nil {
+				log.Errorf("GitHub runner jit-config request failed: %s", err.Error())
+				return "", fmt.Errorf("failed jit-config response")
+			} else if resp.StatusCode != 201 {
+				log.Errorf("GitHub runner jit-config request unsuccessful: %s", resp.Status)
+				defer resp.Body.Close()
+				return "", fmt.Errorf("failed jit-config response")
+			} else {
+				defer resp.Body.Close()
+				body, _ := io.ReadAll(resp.Body)
+				payload := map[string]any{}
+				if err := json.Unmarshal(body, &payload); err != nil {
+					log.Errorf("GitHub runner jit-config response missing: %s", err.Error())
+					return "", fmt.Errorf("failed jit-config response")
+				} else if jitConfig, ok := payload["encoded_jit_config"].(string); ok && len(jitConfig) > 0 {
+					return jitConfig, nil
+				} else {
+					log.Errorf("GitHub runner jit-config is empty")
+					return "", fmt.Errorf("failed jit-config response")
 				}
 			}
 		}
@@ -392,32 +457,65 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 	return nil
 }
 
+const runner_script_wrapper = `
+#!/bin/bash
+val=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/%s" -H "Metadata-Flavor: Google")
+curl "http://metadata.google.internal/computeMetadata/v1/project/attributes/%s" -H "Metadata-Flavor: Google" > runner_startup.sh
+chmod +x ./runner_startup.sh
+./runner_startup.sh $val
+rm runner_startup.sh
+`
+
+func (s *Autoscaler) createVmWithRegistrationToken(ctx *gin.Context, instanceName string) {
+	if token, err := s.GenerateRunnerRegistrationToken(ctx); err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, err)
+	} else {
+		registration_token_attr := fmt.Sprintf("%s_%s", RUNNER_REGISTRATION_TOKEN_ATTR, RandStringRunes(16))
+		if err := s.CreateInstanceFromTemplate(ctx, instanceName, &computepb.Items{
+			Key:   proto.String(registration_token_attr),
+			Value: proto.String(token),
+		}, &computepb.Items{
+			Key:   proto.String("startup-script"),
+			Value: proto.String(fmt.Sprintf(runner_script_wrapper, registration_token_attr, RUNNER_SCRIPT_REGISTER_RUNNER_ATTR)),
+		}); err != nil {
+			ctx.AbortWithError(http.StatusInternalServerError, err)
+		} else {
+			ctx.Status(http.StatusOK)
+		}
+	}
+}
+
+func (s *Autoscaler) createVmWithJitConfig(ctx *gin.Context, instanceName string) {
+	if jitConfig, err := s.GenerateRunnerJitConfig(ctx, instanceName); err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, err)
+	} else {
+		jit_config_attr := fmt.Sprintf("%s_%s", RUNNER_JIT_CONFIG_ATTR, RandStringRunes(16))
+		if err := s.CreateInstanceFromTemplate(ctx, instanceName, &computepb.Items{
+			Key:   proto.String(jit_config_attr),
+			Value: proto.String(jitConfig),
+		}, &computepb.Items{
+			Key:   proto.String("startup-script"),
+			Value: proto.String(fmt.Sprintf(runner_script_wrapper, jit_config_attr, RUNNER_SCRIPT_REGISTER_JIT_RUNNER_ATTR)),
+		}); err != nil {
+			ctx.AbortWithError(http.StatusInternalServerError, err)
+		} else {
+			ctx.Status(http.StatusOK)
+		}
+	}
+}
+
 func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 
 	log.Info("Received create-vm cloud task callback")
 	if data, err := s.verifySignature(ctx); err == nil {
-		if token, err := s.GenerateRunnerRegistrationToken(ctx); err != nil {
-			ctx.AbortWithError(http.StatusInternalServerError, err)
+		if s.conf.RunnerGroupId > 0 {
+			// use jit config
+			log.Info("Using jit config for runner registration")
+			s.createVmWithJitConfig(ctx, string(data))
 		} else {
-			registration_token_attr := fmt.Sprintf("%s_%s", RUNNER_REGISTRATION_TOKEN_ATTR, randStringRunes(16))
-			if err := s.CreateInstanceFromTemplate(ctx, string(data), &computepb.Items{
-				Key:   proto.String(registration_token_attr),
-				Value: proto.String(token),
-			}, &computepb.Items{
-				Key: proto.String("startup-script"),
-				Value: proto.String(fmt.Sprintf(`
-#!/bin/bash
-registration_token=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/%s" -H "Metadata-Flavor: Google")
-curl "http://metadata.google.internal/computeMetadata/v1/project/attributes/%s" -H "Metadata-Flavor: Google" > runner_startup.sh
-chmod +x ./runner_startup.sh
-./runner_startup.sh $registration_token
-rm runner_startup.sh
-`, registration_token_attr, RUNNER_STARTUP_SCRIPT_ATTR)),
-			}); err != nil {
-				ctx.AbortWithError(http.StatusInternalServerError, err)
-			} else {
-				ctx.Status(http.StatusOK)
-			}
+			// use registration token
+			log.Info("Using registration token for runner registration")
+			s.createVmWithRegistrationToken(ctx, string(data))
 		}
 	}
 }
@@ -452,7 +550,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				if payload.Action == QUEUED {
 					if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
 						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateVm)
-						if err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, randStringRunes(10))); err != nil {
+						if err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, RandStringRunes(10))); err != nil {
 							log.Errorf("Can not enqueue create-vm cloud task callback: %s", err.Error())
 							ctx.AbortWithError(http.StatusInternalServerError, err)
 							return
@@ -461,7 +559,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 						log.Warnf("Webhook requested to start a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 					}
 				} else if payload.Action == COMPLETED {
-					if payload.Job.RunnerGroupName == s.conf.RunnerGroup {
+					if payload.Job.RunnerGroupName == s.conf.RunnerGroupName {
 						if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
 							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm)
 							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, payload.Job.RunnerName); err != nil {
@@ -473,7 +571,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 							log.Warnf("Webhook signaled to delete a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 						}
 					} else {
-						log.Warnf("Webhook signaled to delete a runner that does not belong to the expected runner group (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerGroup, payload.Job.RunnerGroupName)
+						log.Warnf("Webhook signaled to delete a runner that does not belong to the expected runner group (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerGroupName, payload.Job.RunnerGroupName)
 					}
 				}
 				ctx.Status(http.StatusOK)
@@ -496,7 +594,8 @@ type AutoscalerConfig struct {
 	InstanceTemplate string
 	SecretVersion    string
 	RunnerPrefix     string
-	RunnerGroup      string
+	RunnerGroupName  string
+	RunnerGroupId    int
 	RunnerLabels     []string
 	GitHubOrg        string
 }

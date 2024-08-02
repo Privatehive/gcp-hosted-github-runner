@@ -38,7 +38,8 @@ func main() {
 	logrus.SetLevel(logrus.InfoLevel)
 
 	labels := strings.Split(getEnvDefault("RUNNER_LABELS", "self-hosted"), ",")
-	runnerGroup := getEnvDefault("RUNNER_GROUP", "Default")
+	runnerGroup := getEnvDefault("RUNNER_GROUP_NAME", "Default")
+	runnerGroupId, _ := strconv.Atoi(getEnvDefault("RUNNER_GROUP_ID", "0"))
 	scaler := pkg.NewAutoscaler(pkg.AutoscalerConfig{
 		RouteWebhook:     getEnvDefault("ROUTE_WEBHOOK", "/webhook"),
 		RouteDeleteVm:    getEnvDefault("ROUTE_DELETE_VM", "/delete_vm"),
@@ -50,7 +51,8 @@ func main() {
 		InstanceTemplate: mustGetEnv("INSTANCE_TEMPLATE"),
 		SecretVersion:    mustGetEnv("SECRET_VERSION"),
 		RunnerPrefix:     getEnvDefault("RUNNER_PREFIX", "runner"),
-		RunnerGroup:      runnerGroup,
+		RunnerGroupName:  runnerGroup,
+		RunnerGroupId:    runnerGroupId,
 		RunnerLabels:     labels,
 		GitHubOrg:        mustGetEnv("GITHUB_ORG"),
 	})
