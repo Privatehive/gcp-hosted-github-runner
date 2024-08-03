@@ -44,7 +44,7 @@ $ terraform init -upgrade && terraform apply
 ```
 
 > [!IMPORTANT]
-> After a successful initial setup you should remove the `runner_webhook_config` output because it prints the webhook secret. Also make sure that the Terraform state file is stored in a save place (e.g. in a [Cloud Storage bucket](https://cloud.google.com/docs/terraform/resource-management/store-state)). The state file contains the webhook secret as plaintext.
+> After a successful initial setup you should remove the `runner_webhook_config` output because it prints the webhook secret. Also make sure that the Terraform state file is stored in a safe place (e.g. in a [Cloud Storage bucket](https://cloud.google.com/docs/terraform/resource-management/store-state)). The state file contains the webhook secret as plaintext.
 
 #### 2. Configure GitHub webhook
 
@@ -160,7 +160,7 @@ You can observer the runner registration process by connecting to the VM instanc
 $ sudo journalctl -u google-startup-scripts.service --follow
 ```
 
-#### New VM Instance not starting (but a lot of instances are already running)
+#### New VM Instance not created (but a lot of instances are already running)
 
 You exceeded your projects vCPU limit for the machine type in the region or for all regions. You may find an error log message in the Cloud Run logs stating `Machine Type vCPU quota exceeded for region`. Request a quota increase from google customer support for the project.
 
