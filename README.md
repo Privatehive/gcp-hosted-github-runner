@@ -60,7 +60,7 @@ Have a look at the Terraform output `runner_webhook_config`. There you find the 
 
 #### 3. Provide PAT
 
-Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization Read/Write permission "Self-hosted runners". This PAT is needed to automatically create a shored lived [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) for each ephemeral runner to join the runner group of the Organization.
+Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization Read/Write permission "Self-hosted runners". This PAT is needed to automatically create a shored lived [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) or [jit-config](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-organization) for each ephemeral runner to join the runner group of the Organization.
 
 Then open the [Secret Manager](https://console.cloud.google.com/security/secret-manager) in the Google Cloud Console and add a new Version to the already existing secret "github-pat-token". Paste the PAT into the Secret value field and click "ADD NEW VERSION".
 
