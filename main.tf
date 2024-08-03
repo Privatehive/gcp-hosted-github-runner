@@ -21,6 +21,10 @@ locals {
   zone                        = data.google_client_config.current.zone
   runnerLabel                 = join(",", var.github_runner_labels)
   runnerLabelInstanceTemplate = length(var.github_runner_labels) == 0 ? "" : format("--no-default-labels --labels '%s'", local.runnerLabel)
+  hasEnterprise               = length(var.github_enterprise) > 0
+  hasOrg                      = length(var.github_organization) > 0
+  hasRepo                     = length(var.github_repositories) > 0
+  sourceQueryParamName        = "src"
 }
 
 resource "google_project_service" "compute_api" {

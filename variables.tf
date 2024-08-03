@@ -6,7 +6,7 @@ variable "machine_type" {
 
 variable "machine_image" {
   type        = string
-  description = "The VM instance boot image (gcloud compute images list --filter ubuntu-os). Only Linux is supported."
+  description = "The VM instance boot image (gcloud compute images list --filter ubuntu-os). Only Linux is supported!"
   default     = "ubuntu-os-cloud/ubuntu-minimal-2004-lts"
 }
 
@@ -34,21 +34,32 @@ variable "enable_debug" {
   default     = false
 }
 
+variable "github_enterprise" {
+  type        = string
+  description = "The name of the GitHub enterprise the runner will join"
+  default     = ""
+  validation {
+    condition     = length(var.github_enterprise) > 0 && length(var.github_organization) == 0 && length(var.github_repositories) == 0
+    error_message = "The variable github_enterprise must not be used in combination with github_organization or github_repositories!"
+  }
+}
+
 variable "github_organization" {
   type        = string
   description = "The name of the GitHub organization the runner will join"
+  default     = ""
 }
 
-variable "github_runner_group_name" {
-  type        = string
-  description = "The name of the GitHub runner group the runner will join"
-  default     = "Default"
+variable "github_repositories" {
+  type        = list(string)
+  description = "The name(s) of GitHub repositories the runner will join. The format of the repository is: OWNER/REPO"
+  default     = []
 }
 
 variable "github_runner_group_id" {
   type        = number
-  description = "The ID of the GitHub runner group the runner will join (must be the same group with name var.github_runner_group_name). If this value is greater 0 then a jit config is used for runner registration. Otherwise a registration token is used!"
-  default     = 0
+  description = "The ID of the GitHub runner group the runner will join"
+  default     = 1
 }
 
 variable "github_runner_labels" {
@@ -57,7 +68,7 @@ variable "github_runner_labels" {
   default     = ["self-hosted"]
   validation {
     condition     = length(var.github_runner_labels) > 0
-    error_message = "The variable github_runner_labels must contain at least one not empty value!"
+    error_message = "The variable github_runner_labels must contain at least one value!"
   }
 }
 

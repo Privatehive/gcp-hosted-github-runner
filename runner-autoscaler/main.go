@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"os"
 	"strconv"
 	"strings"
@@ -9,6 +10,16 @@ import (
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
+
+func getEnvDefaultInt64(name string, defaultValue int64) int64 {
+
+	if val, ok := os.LookupEnv(name); ok {
+		if nb, err := strconv.Atoi(val); err == nil {
+			return int64(nb)
+		}
+	}
+	return defaultValue
+}
 
 func getEnvDefault(name string, defaultValue string) string {
 
@@ -23,7 +34,16 @@ func mustGetEnv(name string) string {
 	if val, ok := os.LookupEnv(name); ok {
 		return val
 	} else {
-		panic("Env " + name + " not found")
+		panic("Mandatory Env " + name + " not found")
+	}
+}
+
+func mustBase64Decode(data string) string {
+
+	if data, err := base64.StdEncoding.DecodeString(data); err != nil {
+		panic(err)
+	} else {
+		return string(data)
 	}
 }
 
@@ -33,35 +53,75 @@ func main() {
 		DisableTimestamp: true,
 		FieldMap: logrus.FieldMap{
 			logrus.FieldKeyLevel: "severity",
+			logrus.FieldKeyMsg:   "message",
 		},
 	})
 	logrus.SetLevel(logrus.InfoLevel)
 
-	labels := strings.Split(getEnvDefault("RUNNER_LABELS", "self-hosted"), ",")
-	runnerGroup := getEnvDefault("RUNNER_GROUP_NAME", "Default")
-	runnerGroupId, _ := strconv.Atoi(getEnvDefault("RUNNER_GROUP_ID", "0"))
-	scaler := pkg.NewAutoscaler(pkg.AutoscalerConfig{
-		RouteWebhook:     getEnvDefault("ROUTE_WEBHOOK", "/webhook"),
-		RouteDeleteVm:    getEnvDefault("ROUTE_DELETE_VM", "/delete_vm"),
-		RouteCreateVm:    getEnvDefault("ROUTE_CREATE_VM", "/create_vm"),
-		WebhookSecret:    getEnvDefault("WEBHOOK_SECRET", ""),
-		ProjectId:        mustGetEnv("PROJECT_ID"),
-		Zone:             mustGetEnv("ZONE"),
-		TaskQueue:        mustGetEnv("TASK_QUEUE"),
-		InstanceTemplate: mustGetEnv("INSTANCE_TEMPLATE"),
-		SecretVersion:    mustGetEnv("SECRET_VERSION"),
-		RunnerPrefix:     getEnvDefault("RUNNER_PREFIX", "runner"),
-		RunnerGroupName:  runnerGroup,
-		RunnerGroupId:    runnerGroupId,
-		RunnerLabels:     labels,
-		GitHubOrg:        mustGetEnv("GITHUB_ORG"),
-	})
+	config := pkg.AutoscalerConfig{
+		RouteWebhook:      getEnvDefault("ROUTE_WEBHOOK", "/webhook"),
+		RouteDeleteVm:     getEnvDefault("ROUTE_DELETE_VM", "/delete_vm"),
+		RouteCreateVm:     getEnvDefault("ROUTE_CREATE_VM", "/create_vm"),
+		ProjectId:         mustGetEnv("PROJECT_ID"),
+		Zone:              mustGetEnv("ZONE"),
+		TaskQueue:         mustGetEnv("TASK_QUEUE"),
+		InstanceTemplate:  mustGetEnv("INSTANCE_TEMPLATE"),
+		SecretVersion:     mustGetEnv("SECRET_VERSION"),
+		RunnerPrefix:      getEnvDefault("RUNNER_PREFIX", "runner"),
+		RunnerGroupId:     getEnvDefaultInt64("RUNNER_GROUP_ID", 1),
+		RunnerLabels:      []string{},
+		RegisteredSources: map[string]pkg.Source{},
+		SourceQueryParam:  getEnvDefault("SOURCE_QUERY_PARAM_NAME", "src"),
+	}
 
-	if len(labels) == 0 {
+	if enterpriseEnv := strings.Split(";", getEnvDefault("GITHUB_ENTERPRISE", "")); len(enterpriseEnv) == 2 {
+		if _, ok := config.RegisteredSources[enterpriseEnv[0]]; !ok {
+			config.RegisteredSources[enterpriseEnv[0]] = pkg.Source{
+				Name:       enterpriseEnv[0],
+				SourceType: pkg.TypeEnterprise,
+				Secret:     mustBase64Decode(enterpriseEnv[1]),
+			}
+			log.Infof("Registered enterprise %s", enterpriseEnv[0])
+		} else {
+			panic("Found duplicate source key: " + enterpriseEnv[0])
+		}
+	}
+
+	if orgEnv := strings.Split(";", getEnvDefault("GITHUB_ORG", "")); len(orgEnv) == 2 {
+		if _, ok := config.RegisteredSources[orgEnv[0]]; !ok {
+			config.RegisteredSources[orgEnv[0]] = pkg.Source{
+				Name:       orgEnv[0],
+				SourceType: pkg.TypeOrganization,
+				Secret:     mustBase64Decode(orgEnv[1]),
+			}
+			log.Infof("Registered organization %s", orgEnv[0])
+		} else {
+			panic("Found duplicate source key: " + orgEnv[0])
+		}
+	}
+
+	for _, repoEnv := range strings.Split(",", getEnvDefault("GITHUB_REPOS", "")) {
+		if repo := strings.Split(";", repoEnv); len(repo) == 2 {
+			if _, ok := config.RegisteredSources[repo[0]]; !ok {
+				config.RegisteredSources[repo[0]] = pkg.Source{
+					Name:       repo[0],
+					SourceType: pkg.TypeRepository,
+					Secret:     mustBase64Decode(repo[1]),
+				}
+				log.Infof("Registered repository %s", repo[0])
+			} else {
+				panic("Found duplicate source key: " + repo[0])
+			}
+		}
+	}
+
+	if labels := strings.Split(getEnvDefault("RUNNER_LABELS", "self-hosted"), ","); len(labels) == 0 {
 		log.Warn("No workflow runner labels were provided. You should at least add the label \"self-hosted\"")
+	} else {
+		config.RunnerLabels = labels
 	}
 
 	port, _ := strconv.Atoi(getEnvDefault("PORT", "8080"))
-	log.Infof("Starting autoscaler on port %d observing workflow jobs of runner group \"%s\" with labels \"%s\"", port, runnerGroup, strings.Join(labels, ", "))
-	scaler.Srv(port)
+	log.Infof("Starting autoscaler on port %d observing workflow jobs with labels \"%s\"", port, strings.Join(config.RunnerLabels, ", "))
+	pkg.NewAutoscaler(config).Srv(port)
 }

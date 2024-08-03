@@ -25,7 +25,6 @@ provider "google" {
 module "github-runner" {
   source                    = "github.com/Privatehive/gcp-hosted-github-runner"
   github_organization       = "<the_organization_name>" // Provide the name of the GitHub Organization
-  github_runner_group_name  = "Default" // The name of the GitHub Organization runner group
   github_runner_group_id    = 1 // (optional - but recommended) The GitHub Organization runner group ID. For an explanation why it't recommended to provide a value see README.md
   github_runner_prefix      = "runner" // The VM instance name starts with this prefix (a random string is added as a suffix)
   machine_type              = "c2d-highcpu-8" // The machine type of the VM instance

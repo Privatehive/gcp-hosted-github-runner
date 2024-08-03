@@ -1,4 +1,15 @@
-resource "random_password" "webhook_secret" {
+resource "random_password" "webhook_enterprise_secret" {
+  length  = 24
+  special = true
+}
+
+resource "random_password" "webhook_org_secret" {
+  length  = 24
+  special = true
+}
+
+resource "random_password" "webhook_repo_secret" {
+  for_each = toset(var.github_repositories)
   length  = 24
   special = true
 }
@@ -22,10 +33,6 @@ resource "google_cloud_run_v2_service" "autoscaler" {
       env {
         name  = "ROUTE_WEBHOOK"
         value = local.webhookUrl
-      }
-      env {
-        name  = "WEBHOOK_SECRET"
-        value = random_password.webhook_secret.result
       }
       env {
         name  = "PROJECT_ID"
@@ -52,10 +59,6 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         value = var.github_runner_prefix
       }
       env {
-        name  = "RUNNER_GROUP_NAME"
-        value = var.github_runner_group_name
-      }
-      env {
         name  = "RUNNER_GROUP_ID"
         value = var.github_runner_group_id
       }
@@ -64,8 +67,20 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         value = local.runnerLabel
       }
       env {
+        name  = "GITHUB_ENTERPRISE"
+        value = format("%s;%s", var.github_enterprise, base64encode(random_password.webhook_enterprise_secret.result))
+      }
+      env {
         name  = "GITHUB_ORG"
-        value = var.github_organization
+        value = format("%s;%s", var.github_organization, base64encode(random_password.webhook_org_secret.result))
+      }
+      env {
+        name  = "GITHUB_REPOS"
+        value = join(",", [for i, v in var.github_repositories : format("%s;%s", v, base64encode(random_password.webhook_repo_secret[v].result))])
+      }
+      env {
+        name  = "SOURCE_QUERY_PARAM_NAME"
+        value = local.sourceQueryParamName
       }
       dynamic "env" {
         for_each = var.enable_debug ? [0] : []

@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
@@ -42,7 +43,24 @@ const RUNNER_SCRIPT_REGISTER_RUNNER_ATTR string = "startup_script_register_runne
 const RUNNER_SCRIPT_REGISTER_JIT_RUNNER_ATTR string = "startup_script_register_jit_runner" // has to match the global custom metadata in compute.tf
 
 const RUNNER_REGISTER_TOKEN_ORG_ENDPOINT string = "https://api.github.com/orgs/%s/actions/runners/registration-token"
-const RUNNER_JIT_CONFIG_ENDPOINT string = "https://api.github.com/orgs/%s/actions/runners/generate-jitconfig"
+
+const RUNNER_ENTERPRISE_JIT_CONFIG_ENDPOINT string = "https://api.github.com/enterprises/%s/actions/runners/generate-jitconfig"
+const RUNNER_ORG_JIT_CONFIG_ENDPOINT string = "https://api.github.com/orgs/%s/actions/runners/generate-jitconfig"
+const RUNNER_REPO_JIT_CONFIG_ENDPOINT string = "https://api.github.com/repos/%s/actions/runners/generate-jitconfig" // format USER/REPO
+
+type SourceType string
+
+const (
+	TypeEnterprise   SourceType = "enterprise"
+	TypeOrganization SourceType = "organization"
+	TypeRepository   SourceType = "repository"
+)
+
+type Source struct {
+	Name       string     `json:"name"`
+	SourceType SourceType `json:"type"`
+	Secret     string     `json:"secret"`
+}
 
 type Job struct {
 	Id              int64    `json:"id"`
@@ -51,6 +69,7 @@ type Job struct {
 	Labels          []string `json:"labels"`
 	RunnerName      string   `json:"runner_name"`
 	RunnerGroupName string   `json:"runner_group_name"`
+	RunnerGroupId   int64    `json:"runner_group_id"`
 }
 
 type Payload struct {
@@ -106,6 +125,7 @@ const (
 	Unknown   State = "unknown"
 )
 
+/*
 func (s State) isStopped() bool {
 
 	return s == STOPPING || s == SUSPENDING || s == SUSPENDED || s == TERMINATED
@@ -114,15 +134,15 @@ func (s State) isStopped() bool {
 func (s State) isRunning() bool {
 
 	return s == PROVISIONING || s == STAGING || s == RUNNING || s == REPAIRING
-}
+}*/
 
 type InstanceClient struct {
 	*compute.InstancesClient
 }
 
-func createCallbackUrl(ctx *gin.Context, path string) string {
+func createCallbackUrl(ctx *gin.Context, path string, srcQueryName string, srcQueryValue string) string {
 
-	return "https://" + ctx.Request.Host + path
+	return "https://" + ctx.Request.Host + path + "?" + srcQueryName + "=" + url.QueryEscape(srcQueryValue)
 }
 
 func newComputeClient(ctx context.Context) *InstanceClient {
@@ -170,23 +190,31 @@ func calcSigHex(secret []byte, data []byte) string {
 	return hex.EncodeToString(sig.Sum(nil))
 }
 
-func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, error) {
+// returns http body, "src" query, error
+func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, Source, error) {
 
 	if signature := ctx.GetHeader(SHA_HEADER); len(signature) == 71 {
 		if body, err := io.ReadAll(ctx.Request.Body); err != nil {
 			log.Errorf("Error receiving http body: %s", err.Error())
-			ctx.AbortWithError(http.StatusBadRequest, err)
-			return nil, err
+			return nil, Source{}, ctx.AbortWithError(http.StatusBadRequest, err)
 		} else {
-			if calcSignature := calcSigHex([]byte(s.conf.WebhookSecret), body); calcSignature == signature[7:] {
-				return body, nil
+			if src, ok := ctx.GetQuery(s.conf.SourceQueryParam); ok {
+				if source, ok := s.conf.RegisteredSources[src]; ok {
+					if calcSignature := calcSigHex([]byte(source.Secret), body); calcSignature == signature[7:] {
+						return body, source, nil
+					}
+				} else {
+					log.Errorf("Source with name %s not registered", src)
+				}
+			} else {
+				log.Error("Missing src query parameter")
 			}
 		}
 	}
 
 	log.Warnf("%s is unauthorized", ctx.RemoteIP())
 	ctx.AbortWithStatus(http.StatusUnauthorized)
-	return nil, fmt.Errorf("unauthorized")
+	return nil, Source{}, fmt.Errorf("unauthorized")
 }
 
 func (s *Autoscaler) GetInstanceState(ctx context.Context, instanceName string) (State, error) {
@@ -331,6 +359,7 @@ func (s *Autoscaler) readPat(ctx context.Context) (string, error) {
 	}
 }
 
+/*
 func (s *Autoscaler) GenerateRunnerRegistrationToken(ctx context.Context) (string, error) {
 
 	log.Debugf("About to request GitHub runner registration token using PAT from secret version: %s", s.conf.SecretVersion)
@@ -370,9 +399,9 @@ func (s *Autoscaler) GenerateRunnerRegistrationToken(ctx context.Context) (strin
 			}
 		}
 	}
-}
+}*/
 
-func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, runnerName string) (string, error) {
+func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, url string, runnerName string, runnerGroupId int64) (string, error) {
 
 	log.Debugf("About to request GitHub runner jit config using PAT from secret version: %s", s.conf.SecretVersion)
 	secretAccessClient := newSecretAccessClient(ctx)
@@ -382,11 +411,11 @@ func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, runnerName str
 	} else {
 		reqPayload := map[string]any{}
 		reqPayload["name"] = runnerName
-		reqPayload["runner_group_id"] = s.conf.RunnerGroupId
+		reqPayload["runner_group_id"] = runnerGroupId
 		reqPayload["labels"] = s.conf.RunnerLabels
 		reqPayload["work_folder"] = "_work"
 		data, _ := json.Marshal(reqPayload)
-		if req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf(RUNNER_JIT_CONFIG_ENDPOINT, s.conf.GitHubOrg), bytes.NewReader(data)); err != nil {
+		if req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data)); err != nil {
 			log.Errorf("Could not create GitHub runner jit-config request")
 			return "", fmt.Errorf("failed jit-config request")
 		} else {
@@ -419,7 +448,7 @@ func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, runnerName str
 	}
 }
 
-func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, message string) error {
+func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string, secret string, payload string) error {
 
 	now := timestamppb.Now()
 	now.Seconds += 1 // delay the callback a little bit
@@ -436,14 +465,14 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 					HttpMethod: taskspb.HttpMethod_POST,
 					Url:        url,
 					Headers: map[string]string{
-						SHA_HEADER: SHA_PREFIX + calcSigHex([]byte(s.conf.WebhookSecret), []byte(message)),
+						SHA_HEADER: SHA_PREFIX + calcSigHex([]byte(secret), []byte(payload)),
 					},
 				},
 			},
 		},
 	}
 
-	req.Task.GetHttpRequest().Body = []byte(message)
+	req.Task.GetHttpRequest().Body = []byte(payload)
 
 	client := newTaskClient(ctx)
 	defer client.Close()
@@ -451,7 +480,7 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url, messa
 	if err != nil {
 		return fmt.Errorf("cloudtasks.CreateTask failed: %v", err)
 	} else {
-		log.Infof("Created cloud task callback with url \"%s\" and payload \"%s\"", url, message)
+		log.Infof("Created cloud task callback with url \"%s\" and payload \"%s\"", url, payload)
 	}
 
 	return nil
@@ -466,7 +495,9 @@ chmod +x ./runner_startup.sh
 rm runner_startup.sh
 `
 
+/*
 func (s *Autoscaler) createVmWithRegistrationToken(ctx *gin.Context, instanceName string) {
+
 	if token, err := s.GenerateRunnerRegistrationToken(ctx); err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, err)
 	} else {
@@ -483,10 +514,11 @@ func (s *Autoscaler) createVmWithRegistrationToken(ctx *gin.Context, instanceNam
 			ctx.Status(http.StatusOK)
 		}
 	}
-}
+}*/
 
-func (s *Autoscaler) createVmWithJitConfig(ctx *gin.Context, instanceName string) {
-	if jitConfig, err := s.GenerateRunnerJitConfig(ctx, instanceName); err != nil {
+func (s *Autoscaler) createVmWithJitConfig(ctx *gin.Context, url string, instanceName string, runnerGroupId int64) {
+
+	if jitConfig, err := s.GenerateRunnerJitConfig(ctx, url, instanceName, runnerGroupId); err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, err)
 	} else {
 		jit_config_attr := fmt.Sprintf("%s_%s", RUNNER_JIT_CONFIG_ATTR, RandStringRunes(16))
@@ -507,15 +539,28 @@ func (s *Autoscaler) createVmWithJitConfig(ctx *gin.Context, instanceName string
 func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 
 	log.Info("Received create-vm cloud task callback")
-	if data, err := s.verifySignature(ctx); err == nil {
+	if data, src, err := s.verifySignature(ctx); err == nil {
 		if s.conf.RunnerGroupId > 0 {
 			// use jit config
-			log.Info("Using jit config for runner registration")
-			s.createVmWithJitConfig(ctx, string(data))
+			switch src.SourceType {
+			case TypeEnterprise:
+				log.Infof("Using jit config for runner registration for enterprise: %s", src.Name)
+				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ENTERPRISE_JIT_CONFIG_ENDPOINT, src.Name), string(data), s.conf.RunnerGroupId)
+			case TypeOrganization:
+				log.Infof("Using jit config for runner registration for organization: %s", src.Name)
+				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ORG_JIT_CONFIG_ENDPOINT, src.Name), string(data), s.conf.RunnerGroupId)
+			case TypeRepository:
+				log.Infof("Using jit config for runner registration for repository: %s", src.Name)
+				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), string(data), 1)
+			default:
+				log.Errorf("Missing source type for %s", src.Name)
+				ctx.Status(http.StatusBadRequest)
+			}
 		} else {
 			// use registration token
-			log.Info("Using registration token for runner registration")
-			s.createVmWithRegistrationToken(ctx, string(data))
+			log.Error("Registration via registration token deactivated")
+			ctx.Status(http.StatusNotImplemented)
+			//s.createVmWithRegistrationToken(ctx, string(data))
 		}
 	}
 }
@@ -523,7 +568,7 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 func (s *Autoscaler) handleDeleteVm(ctx *gin.Context) {
 
 	log.Info("Received delete-vm cloud task callback")
-	if data, err := s.verifySignature(ctx); err == nil {
+	if data, _, err := s.verifySignature(ctx); err == nil {
 		if err := s.DeleteInstance(ctx, string(data)); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
@@ -535,7 +580,7 @@ func (s *Autoscaler) handleDeleteVm(ctx *gin.Context) {
 func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 
 	log.Info("Received webhook")
-	if data, err := s.verifySignature(ctx); err == nil {
+	if data, src, err := s.verifySignature(ctx); err == nil {
 		event := ctx.GetHeader(EVENT_HEADER)
 		log.Info(string(data))
 		if event == WEBHOOK_PING_EVENT {
@@ -549,8 +594,8 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 			} else {
 				if payload.Action == QUEUED {
 					if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
-						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateVm)
-						if err := s.createCallbackTaskWithToken(ctx, createUrl, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, RandStringRunes(10))); err != nil {
+						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateVm, s.conf.SourceQueryParam, src.Name)
+						if err := s.createCallbackTaskWithToken(ctx, createUrl, src.Secret, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, RandStringRunes(10))); err != nil {
 							log.Errorf("Can not enqueue create-vm cloud task callback: %s", err.Error())
 							ctx.AbortWithError(http.StatusInternalServerError, err)
 							return
@@ -559,10 +604,10 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 						log.Warnf("Webhook requested to start a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 					}
 				} else if payload.Action == COMPLETED {
-					if payload.Job.RunnerGroupName == s.conf.RunnerGroupName {
+					if payload.Job.RunnerGroupId == int64(s.conf.RunnerGroupId) {
 						if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
-							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm)
-							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, payload.Job.RunnerName); err != nil {
+							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm, s.conf.SourceQueryParam, src.Name)
+							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, src.Secret, payload.Job.RunnerName); err != nil {
 								log.Errorf("Can not enqueue delete-vm cloud task callback: %s", err.Error())
 								ctx.AbortWithError(http.StatusInternalServerError, err)
 								return
@@ -571,7 +616,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 							log.Warnf("Webhook signaled to delete a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 						}
 					} else {
-						log.Warnf("Webhook signaled to delete a runner that does not belong to the expected runner group (expected \"%s\" got \"%s\") - ignoring", s.conf.RunnerGroupName, payload.Job.RunnerGroupName)
+						log.Warnf("Webhook signaled to delete a runner that does not belong to the expected runner group (expected \"%d\" got \"%d\") - ignoring", s.conf.RunnerGroupId, payload.Job.RunnerGroupId)
 					}
 				}
 				ctx.Status(http.StatusOK)
@@ -583,21 +628,29 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 	}
 }
 
+type Pair struct {
+	Name   string
+	Secret string
+}
+
+func (p Pair) IsIValid() bool {
+	return len(p.Name) > 0 && len(p.Secret) > 0
+}
+
 type AutoscalerConfig struct {
-	RouteWebhook     string
-	RouteCreateVm    string
-	RouteDeleteVm    string
-	WebhookSecret    string
-	ProjectId        string
-	Zone             string
-	TaskQueue        string
-	InstanceTemplate string
-	SecretVersion    string
-	RunnerPrefix     string
-	RunnerGroupName  string
-	RunnerGroupId    int
-	RunnerLabels     []string
-	GitHubOrg        string
+	RouteWebhook      string
+	RouteCreateVm     string
+	RouteDeleteVm     string
+	ProjectId         string
+	Zone              string
+	TaskQueue         string
+	InstanceTemplate  string
+	SecretVersion     string
+	RunnerPrefix      string
+	RunnerGroupId     int64
+	RunnerLabels      []string
+	RegisteredSources map[string]Source
+	SourceQueryParam  string
 }
 
 type Autoscaler struct {
@@ -605,7 +658,7 @@ type Autoscaler struct {
 	conf   AutoscalerConfig
 }
 
-func NewAutoscaler(config AutoscalerConfig) Autoscaler {
+func NewAutoscaler(config AutoscalerConfig) *Autoscaler {
 
 	engine := gin.New()
 
@@ -618,7 +671,7 @@ func NewAutoscaler(config AutoscalerConfig) Autoscaler {
 	engine.POST(config.RouteDeleteVm, scaler.handleDeleteVm)
 	engine.POST(config.RouteWebhook, scaler.handleWebhook)
 	engine.GET("/healthcheck", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
-	return scaler
+	return &scaler
 }
 
 func (s *Autoscaler) Srv(port int) {

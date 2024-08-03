@@ -41,6 +41,7 @@ resource "google_compute_instance_template" "runner_instance" {
 }
 
 // First parameter has to be the registration token
+/*
 resource "google_compute_project_metadata_item" "startup_scripts_register_runner" {
   key   = "startup_script_register_runner"
   value = <<EOT
@@ -64,7 +65,7 @@ popd
 rm /tmp/agent.tar.gz
 echo "Setup finished"
 EOT
-}
+}*/
 
 // First parameter has to be the base64 encoded jit_config
 resource "google_compute_project_metadata_item" "startup_scripts_register_jit_runner" {
