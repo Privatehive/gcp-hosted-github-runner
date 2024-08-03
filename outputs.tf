@@ -7,3 +7,8 @@ output "github_pat_secret_name" {
   value       = google_secret_manager_secret.github_pat_token.secret_id
   description = "The name of the secret where the GitHub Fine-grained personal access token has to be saved"
 }
+
+output "runner_registration_procedure" {
+  value       = var.github_runner_group_id > 0 ? "jit-config registration": "registration token"
+  description = "What runner registration procedure is used"
+}

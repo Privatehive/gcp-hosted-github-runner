@@ -13,7 +13,7 @@
 ## Quickstart
 
 #### 1. Apply Terraform
-Add this Terraform module to your root module and provide the missing values:
+Add this Terraform module to your root module and provide/adjust the values:
 
 ``` hcl
 provider "google" {
@@ -23,11 +23,12 @@ provider "google" {
 }
 
 module "github-runner" {
-  source               = "github.com/Privatehive/gcp-hosted-github-runner"
-  github_organization  = "<the_organization>" // Provide the name of the GitHub Organization
-  github_runner_group  = "Default" // The name of the GitHub Organization runner group
-  github_runner_prefix = "runner" // The VM instance name starts with this prefix (a random string is added as a suffix)
-  machine_type         = "c2d-highcpu-8" // The machine type of the VM instance
+  source                    = "github.com/Privatehive/gcp-hosted-github-runner"
+  github_organization       = "<the_organization_name>" // Provide the name of the GitHub Organization
+  github_runner_group_name  = "Default" // The name of the GitHub Organization runner group
+  github_runner_group_id    = 1 // (optional - but recommended) The GitHub Organization runner group ID. For an explanation why it't recommended to provide a value see README.md
+  github_runner_prefix      = "runner" // The VM instance name starts with this prefix (a random string is added as a suffix)
+  machine_type              = "c2d-highcpu-8" // The machine type of the VM instance
 }
 
 output "runner_webhook_config" {
@@ -74,21 +75,22 @@ Have a look at the [variables.tf](./variables.tf) file how to further configure 
 > [!TIP]
 > To find the cheapest VM machine_type use this [table](https://gcloud-compute.com/instances.html) and sort by Spot instance cost. But remember that the price varies depending on the region.
 
-## How it works
+## What runner registration procedures to choose
 
-1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/github-runner-autoscaler) with path `/webhook`
-2. The Cloud run enqueues a "create-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
-3. The Cloud task invokes the Cloud Run path `/create_vm`.
-4. The Cloud Run creates a runner registration token (using PAT from Secret Manager).
-5. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default) and provides it with the runner registration token via custom metadata attribute.
-6. Using the registration token the VM registers itself as an **ephemeral** runner in the runner group and immediately starts working on the workflow job.
-7. As soon as the workflow job completed, the GitHub webhook event "Workflow jobs" invokes the Cloud Run again.
-8. The Cloud run enqueues a "delete-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
-9. The Cloud task invokes the Cloud Run path `/delete_vm`.
-10. The Cloud Run deletes the VM instance.
+There are two possible registration procedures for ephemeral runner. Via a **registration token** or via **jit-config**.
+The **jit-config** is preferred over the **registration token**. *Why?*
 
-> [!NOTE]
-> The runner is run by the unprivileged user `agent` with the uid `10000` and gid `10000`
+When using a registration token, the VM itself must carry out the registration process. This means that it must be equipped with the token. The registration token can be used **several times** until it expires (after 1 hour). If a malicious workflow is executed on the runner, the registration token can be extracted from the VM metadata attributes and a malicious runner controlled by an attacker can be registered within your runner group. This malicious runner may then be able to read out workflow secrets. If using the jit-config the registration process is carried out by the Cloud Run **before** the VM instance is started.
+
+The case distinction as to which registration procedure is carried out depends on whether the variable `github_runner_group_id` is provided or not. If provided the preferred jit-config registration is performed; if it is not provided the token registration is performed.
+
+> [!TIP]
+> To check which registration procedure will be performed print the module output `runner_registration_procedure`.
+
+## Runner features
+
+* Executed by unprivileged user with name `agent` with the uid `10000` and gid `10000`
+* Provides docker-daemon and docker-buildx
 
 ## Expected Cost
 
@@ -114,7 +116,24 @@ Standard persistent disk 20 GiB used    ~ $0.0011
                                           $0.053
 ```
 
-Overall, only the compute instance accounts for the majority of the costs.
+Overall, only the compute instance accounts for the "majority" of the costs.
+
+## How it works
+
+1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/github-runner-autoscaler) with path `/webhook`
+2. The Cloud run enqueues a "create-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
+3. The Cloud task invokes the Cloud Run path `/create_vm`.
+4. Depending if `github_runner_group_id` is provided:
+   * If *not provided*: Cloud Run creates a runner [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) (using PAT from Secret Manager).
+   * If *provided*: Cloud Run creates a [jit-config](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-organization) (using PAT from Secret Manager). The runner is then already registered (but marked as offline).
+5. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default) and provides it with the runner registration token **or** with the jit-config via custom metadata attribute.
+6. Depending if `github_runner_group_id` is provided:
+   * If *not provided*: Using the registration token the VM registers itself as an **ephemeral** runner in the runner group and immediately starts working on the workflow job.
+   * If *provided*: The runner is already registered and immediately starts working on the workflow job.
+7. As soon as the workflow job completed, the GitHub webhook event "Workflow jobs" invokes the Cloud Run again.
+8. The Cloud run enqueues a "delete-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
+9.  The Cloud task invokes the Cloud Run path `/delete_vm`.
+10. The Cloud Run deletes the VM instance.
 
 ## Troubleshooting
 
@@ -132,7 +151,7 @@ Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/l
 #### The VM Instance immediately stops after it was created without processing a workflow job
 
 The VM will shoutdown itself if the registration at the GitHub runner group fails. This can be caused by:
-* An invalid/expired runner registration token.
+* An invalid/expired runner registration token (if token registration is performed).
 * A typo in the GitHub Organization name. Check the Terraform variable `github_organization` for typos.
 * A not existing GitHub runner group within the Organization. Check the Terraform variable `github_runner_group` for typos.
 
@@ -144,3 +163,7 @@ $ sudo journalctl -u google-startup-scripts.service --follow
 #### New VM Instance not starting (but a lot of instances are already running)
 
 You exceeded your projects vCPU limit for the machine type in the region or for all regions. You may find an error log message in the Cloud Run logs stating `Machine Type vCPU quota exceeded for region`. Request a quota increase from google customer support for the project.
+
+#### Nothing happens at all
+
+Have a look in the Logs of the Cloud Run.
