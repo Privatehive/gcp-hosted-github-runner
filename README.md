@@ -47,7 +47,7 @@ $ terraform init -upgrade && terraform apply
 
 #### 2. Configure GitHub webhook
 
-Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook payload url(s) and the associated webhook secret(s). For each output line you have to create either an [Enterprise](https://docs.github.com/en/enterprise-cloud@latest/webhooks/using-webhooks/creating-webhooks#creating-a-global-webhook-for-a-github-enterprise), [Organization]((https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks#creating-an-organization-webhook)) or [Repository](https://docs.github.com/en/enterprise-cloud@latest/webhooks/using-webhooks/creating-webhooks#creating-a-repository-webhook) webhook:
+Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook payload url(s) and the associated webhook secret(s). For each output line you have to create either an [Enterprise](https://docs.github.com/en/enterprise-cloud@latest/webhooks/using-webhooks/creating-webhooks#creating-a-global-webhook-for-a-github-enterprise), [Organization](https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks#creating-an-organization-webhook) or [Repository](https://docs.github.com/en/enterprise-cloud@latest/webhooks/using-webhooks/creating-webhooks#creating-a-repository-webhook) webhook:
 * Fill in the Payload URL (from the Terraform output)
 * Select Content type "application/json"
 * Fill in the Secret (from the Terraform output)
