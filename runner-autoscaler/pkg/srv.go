@@ -551,7 +551,7 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ORG_JIT_CONFIG_ENDPOINT, src.Name), string(data), s.conf.RunnerGroupId)
 			case TypeRepository:
 				log.Infof("Using jit config for runner registration for repository: %s", src.Name)
-				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), string(data), 1)
+				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), string(data), 0) // For repositories there is an implicit runner group with id 0
 			default:
 				log.Errorf("Missing source type for %s", src.Name)
 				ctx.Status(http.StatusBadRequest)
