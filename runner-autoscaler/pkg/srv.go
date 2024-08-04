@@ -202,19 +202,24 @@ func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, Source, error) {
 				if source, ok := s.conf.RegisteredSources[src]; ok {
 					if calcSignature := calcSigHex([]byte(source.Secret), body); calcSignature == signature[7:] {
 						return body, source, nil
+					} else {
+						log.Warnf("%s signature did not match", ctx.RemoteIP())
+						return nil, Source{}, ctx.AbortWithError(http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 					}
 				} else {
-					log.Errorf("Source with name %s not registered", src)
+					log.Infof("Source with name %s not registered - ignoring", src)
+					ctx.Status(http.StatusOK) // not considered an error
+					return nil, Source{}, fmt.Errorf("unknown webhook source")
 				}
 			} else {
-				log.Error("Missing src query parameter")
+				log.Errorf("Missing %s query parameter", s.conf.SourceQueryParam)
+				return nil, Source{}, ctx.AbortWithError(http.StatusBadRequest, fmt.Errorf("missing %s query parameter", s.conf.SourceQueryParam))
 			}
 		}
+	} else {
+		log.Warnf("%s did not provide a signature", ctx.RemoteIP())
+		return nil, Source{}, ctx.AbortWithError(http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 	}
-
-	log.Warnf("%s is unauthorized", ctx.RemoteIP())
-	ctx.AbortWithStatus(http.StatusUnauthorized)
-	return nil, Source{}, fmt.Errorf("unauthorized")
 }
 
 func (s *Autoscaler) GetInstanceState(ctx context.Context, instanceName string) (State, error) {
