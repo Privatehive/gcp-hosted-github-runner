@@ -7,9 +7,6 @@
 > [!IMPORTANT]
 > I am not responsible if this Terraform module results in high costs on your billing account. Keep an eye on your billing account and activate alerts!
 
-> [!NOTE]
-> Only works for GitHub organization at the moment.
-
 ## Quickstart
 
 #### 1. Apply Terraform
@@ -24,14 +21,17 @@ provider "google" {
 
 module "github-runner" {
   source                    = "github.com/Privatehive/gcp-hosted-github-runner"
-  github_organization       = "<the_organization_name>" // Provide the name of the GitHub Organization
-  github_runner_group_id    = 1 // (optional - but recommended) The GitHub Organization runner group ID. For an explanation why it't recommended to provide a value see README.md
-  github_runner_prefix      = "runner" // The VM instance name starts with this prefix (a random string is added as a suffix)
-  machine_type              = "c2d-highcpu-8" // The machine type of the VM instance
+  machine_type              = "c2d-highcpu-8" // The machine type of the VM instance.
+  github_runner_group_id    = 1 // The GitHub Organization/Enterprise runner group ID. Has no effect for GitHub Repositories.
+
+  // Provide at least one of the following variables (github_enterprise can't be combined with github_organization or github_repositories):
+  github_enterprise         = "<enterprise_name>" // Provide the name of the GitHub Enterprise.
+  github_organization       = "<organization_name>" // Provide the name of the GitHub Organization.
+  github_repositories       = ["<repository_user/repository_name>"] // Provide USER/NAME of at least one GitHub Repository.
 }
 
 output "runner_webhook_config" {
-  value = nonsensitive(module.github-runner.runner_webhook_config) // remove the output after the initial setup
+  value = nonsensitive(module.github-runner.runner_webhook_config) // Remove the output after the initial setup.
 }
 ```
 
@@ -43,11 +43,11 @@ $ terraform init -upgrade && terraform apply
 ```
 
 > [!IMPORTANT]
-> After a successful initial setup you should remove the `runner_webhook_config` output because it prints the webhook secret. Also make sure that the Terraform state file is stored in a safe place (e.g. in a [Cloud Storage bucket](https://cloud.google.com/docs/terraform/resource-management/store-state)). The state file contains the webhook secret as plaintext.
+> After a successful initial setup you should remove the `runner_webhook_config` output because it prints the webhook secret(s). Also make sure that the Terraform state file is stored in a safe place (e.g. in a [Cloud Storage bucket](https://cloud.google.com/docs/terraform/resource-management/store-state)). The state file contains the webhook secret as plaintext.
 
 #### 2. Configure GitHub webhook
 
-Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook url and secret. Now switch to your GitHub Organization settings and create a [new Organization webhook](https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks#creating-an-organization-webhook):
+Have a look at the Terraform output `runner_webhook_config`. There you find the Cloud Run webhook payload url(s) and the associated webhook secret(s). For each output line you have to create either an [Enterprise](https://docs.github.com/en/enterprise-cloud@latest/webhooks/using-webhooks/creating-webhooks#creating-a-global-webhook-for-a-github-enterprise), [Organization]((https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks#creating-an-organization-webhook)) or [Repository](https://docs.github.com/en/enterprise-cloud@latest/webhooks/using-webhooks/creating-webhooks#creating-a-repository-webhook) webhook:
 * Fill in the Payload URL (from the Terraform output)
 * Select Content type "application/json"
 * Fill in the Secret (from the Terraform output)
@@ -59,13 +59,18 @@ Have a look at the Terraform output `runner_webhook_config`. There you find the 
 
 #### 3. Provide PAT
 
-Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization Read/Write permission "Self-hosted runners". This PAT is needed to automatically create a shored lived [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) or [jit-config](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-organization) for each ephemeral runner to join the runner group of the Organization.
+* For an **Enterprise**: Create a [Personal access token (PAT classic)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) with the "manage_runners:enterprise" scope.
+* For an **Organization**: Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization Read/Write permission "Self-hosted runners". 
+* For **Repositories**: Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Repository permissions Read/Write "Administration".
 
-Then open the [Secret Manager](https://console.cloud.google.com/security/secret-manager) in the Google Cloud Console and add a new Version to the already existing secret "github-pat-token". Paste the PAT into the Secret value field and click "ADD NEW VERSION".
+This PAT is needed to automatically create a [Enterprise](https://docs.github.com/en/enterprise-cloud@latest/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-enterprise), [Organization](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-organization), [Repository](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-a-repository) jit-config for each ephemeral runner to join the Repository or the runner group of an Enterprise/Organization. Then open the [Secret Manager](https://console.cloud.google.com/security/secret-manager) in the Google Cloud Console and add a new Version to the already existing secret "github-pat-token". Paste the PAT into the Secret value field and click "ADD NEW VERSION".
+
+> [!TIP]
+> Currently it is only possible to provide **one** PAT to the secret. That's why you can't combine an Enterprise with an Organization/Repository. The Enterprise needs a PAT classic; The Organization/Repository needs a Fine-grained PAT.
 
 That's it 👍
 
-As soon as you start a GitHub workflow, which contains a job with `runs-on: self-hosted` (or any other label you provided to the Terraform [module variable](./variables.tf) `github_runner_labels`), a VM instance (with the specified `machine_type`) starts. The name of the VM instance starts with the `github_runner_prefix`, which is followed by a random string to make the name unique. The name of the VM instance is also the name of the runner in the GitHub runner group. After the workflow job completed, the VM instance will be deleted again.
+As soon as you start a GitHub workflow, which contains a job with `runs-on: self-hosted` (or any other label you provided to the Terraform [module variable](./variables.tf) `github_runner_labels`), a VM instance (with the specified `machine_type`) starts. The name of the VM instance starts with the `github_runner_prefix`, which is followed by a random string to make the name unique. The name of the VM instance is also the name of the runner in the GitHub runner group or repository. After the workflow job completed, the VM instance will be deleted again.
 
 ## Advanced Configuration
 
@@ -74,22 +79,11 @@ Have a look at the [variables.tf](./variables.tf) file how to further configure 
 > [!TIP]
 > To find the cheapest VM machine_type use this [table](https://gcloud-compute.com/instances.html) and sort by Spot instance cost. But remember that the price varies depending on the region.
 
-## What runner registration procedures to choose
-
-There are two possible registration procedures for ephemeral runner. Via a **registration token** or via **jit-config**.
-The **jit-config** is preferred over the **registration token**. *Why?*
-
-When using a registration token, the VM itself must carry out the registration process. This means that it must be equipped with the token. The registration token can be used **several times** until it expires (after 1 hour). If a malicious workflow is executed on the runner, the registration token can be extracted from the VM metadata attributes and a malicious runner controlled by an attacker can be registered within your runner group. This malicious runner may then be able to read out workflow secrets. If using the jit-config the registration process is carried out by the Cloud Run **before** the VM instance is started.
-
-The case distinction as to which registration procedure is carried out depends on whether the variable `github_runner_group_id` is provided or not. If provided the preferred jit-config registration is performed; if it is not provided the token registration is performed.
-
-> [!TIP]
-> To check which registration procedure will be performed print the module output `runner_registration_procedure`.
-
 ## Runner features
 
-* Executed by unprivileged user with name `agent` with the uid `10000` and gid `10000`
-* Provides docker-daemon and docker-buildx
+* Executed by unprivileged user with name `agent` with the default uid `10000` and gid `10000`. Can be changed with `github_runner_uid`.
+* Provides docker-daemon and docker-buildx by default. Additional packages can be installed with `github_runner_packages`.
+* Only works with images that are based on debian (rely on apt package manager). Runs image `ubuntu-minimal-2004-lts` by default. Change with `machine_image`.
 
 ## Expected Cost
 
@@ -120,17 +114,13 @@ Overall, only the compute instance accounts for the "majority" of the costs.
 ## How it works
 
 1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/github-runner-autoscaler) with path `/webhook`
-2. The Cloud run enqueues a "create-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
+2. The Cloud run validates the caller source (signature) and if valid enqueues a "create-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
 3. The Cloud task invokes the Cloud Run path `/create_vm`.
-4. Depending if `github_runner_group_id` is provided:
-   * If *not provided*: Cloud Run creates a runner [registration token](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-a-registration-token-for-an-organization) (using PAT from Secret Manager).
-   * If *provided*: Cloud Run creates a [jit-config](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-organization) (using PAT from Secret Manager). The runner is then already registered (but marked as offline).
-5. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default) and provides it with the runner registration token **or** with the jit-config via custom metadata attribute.
-6. Depending if `github_runner_group_id` is provided:
-   * If *not provided*: Using the registration token the VM registers itself as an **ephemeral** runner in the runner group and immediately starts working on the workflow job.
-   * If *provided*: The runner is already registered and immediately starts working on the workflow job.
+4. Cloud Run creates a jit-config (using PAT from Secret Manager). The runner is then already registered (but marked as offline).
+5. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default) and provides it with the runner jit-config via custom metadata attribute.
+6. The runner starts working on the workflow job.
 7. As soon as the workflow job completed, the GitHub webhook event "Workflow jobs" invokes the Cloud Run again.
-8. The Cloud run enqueues a "delete-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
+8. The Cloud run validates the caller source (signature) and if valid enqueues a "delete-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
 9.  The Cloud task invokes the Cloud Run path `/delete_vm`.
 10. The Cloud Run deletes the VM instance.
 
@@ -150,9 +140,9 @@ Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/l
 #### The VM Instance immediately stops after it was created without processing a workflow job
 
 The VM will shoutdown itself if the registration at the GitHub runner group fails. This can be caused by:
-* An invalid/expired runner registration token (if token registration is performed).
-* A typo in the GitHub Organization name. Check the Terraform variable `github_organization` for typos.
-* A not existing GitHub runner group within the Organization. Check the Terraform variable `github_runner_group` for typos.
+* An invalid jit-config.
+* A typo in the GitHub Enterprise, Organization, Repository name. Check the Terraform variables `github_enterprise`, `github_organization`, `github_repositories` for typos.
+* A not existing GitHub runner group within the Enterprise/Organization. Check the Terraform variable `github_runner_group` for typos.
 
 You can observer the runner registration process by connecting to the VM instance via SSH and running:
 ```

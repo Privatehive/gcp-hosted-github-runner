@@ -11,13 +11,13 @@ A webserver is listening for GitHub "Workflow jobs" webhook events. Depending on
 
 Following conditions of the workflow job webhook event have to be fulfilled, so a new VM instance will be **created**:
 
-* The webhook signature is valid (see WEBHOOK_SECRET env).
+* The (enterprise, organization, repository) webhook source was configured and the webhook signature is valid (see GITHUB_ENTERPRISE, GITHUB_ORG, GITHUB_REPOS).
 * The webhook `action` value equals `queued`.
 * **All** labels of the workflow job match the configured RUNNER_LABELS.
 
 Following conditions of the workflow job webhook event have to be fulfilled, so an existing VM instance will be **deleted**:
 
-* The webhook signature is valid (see WEBHOOK_SECRET env).
+* The (enterprise, organization, repository) webhook source was configured and the webhook signature is valid (see GITHUB_ENTERPRISE, GITHUB_ORG, GITHUB_REPOS).
 * The webhook `action` value equals `completed`.
 * The webhook `workflow_job.runner_group_id` value equals the configured RUNNER_GROUP_ID.
 * **All** labels of the workflow job match the configured RUNNER_LABELS.
@@ -42,5 +42,5 @@ The scaler is configured via the following environment variables:
 | GITHUB_ENTERPRISE       | ""                                     | The name of the GitHub Enterprise and a webhook secret (base64 encoded) separated by ";".                                                                                                                                                           |
 | GITHUB_ORG              | ""                                     | The name of the GitHub Organization and a webhook secret (base64 encoded) separated by ";".                                                                                                                                                         |
 | GITHUB_REPOS            | "" *(comma separated list)*            | The GitHub repo path (USER/REPO_NAME) and a webhook secret (base64 encoded) separated by ";". Multiple repo path;secret pairs can be provided by separating them by ",". E.g. <USER>/<REPO_NAME>;<BASE64_SECRET>,<USER>/<REPO_NAME>;<BASE64_SECRET> |
-| SOURCE_QUERY_PARAM_NAME | "src"                                  | The query param name that has to be present for every webhook call and must contain the caller name.                                                                                                                                                |
+| SOURCE_QUERY_PARAM_NAME | "src"                                  | The query param name that has to be present for every webhook call and must contain the webhook source name configured with GITHUB_ENTERPRISE, GITHUB_ORG, GITHUB_REPOS.                                                                            |
 | PORT                    | "8080"                                 | To which port the webserver is bound.                                                                                                                                                                                                               |

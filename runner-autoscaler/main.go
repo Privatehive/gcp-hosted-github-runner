@@ -74,43 +74,43 @@ func main() {
 		SourceQueryParam:  getEnvDefault("SOURCE_QUERY_PARAM_NAME", "src"),
 	}
 
-	if enterpriseEnv := strings.Split(";", getEnvDefault("GITHUB_ENTERPRISE", "")); len(enterpriseEnv) == 2 {
+	if enterpriseEnv := strings.Split(getEnvDefault("GITHUB_ENTERPRISE", ""), ";"); len(enterpriseEnv) == 2 {
 		if _, ok := config.RegisteredSources[enterpriseEnv[0]]; !ok {
 			config.RegisteredSources[enterpriseEnv[0]] = pkg.Source{
 				Name:       enterpriseEnv[0],
 				SourceType: pkg.TypeEnterprise,
 				Secret:     mustBase64Decode(enterpriseEnv[1]),
 			}
-			log.Infof("Registered enterprise %s", enterpriseEnv[0])
+			log.Infof("Registered webhook enterprise source: %s", enterpriseEnv[0])
 		} else {
-			panic("Found duplicate source key: " + enterpriseEnv[0])
+			log.Warnf("Found duplicate webhook source key - will be ignored: %s", enterpriseEnv[0])
 		}
 	}
 
-	if orgEnv := strings.Split(";", getEnvDefault("GITHUB_ORG", "")); len(orgEnv) == 2 {
+	if orgEnv := strings.Split(getEnvDefault("GITHUB_ORG", ""), ";"); len(orgEnv) == 2 {
 		if _, ok := config.RegisteredSources[orgEnv[0]]; !ok {
 			config.RegisteredSources[orgEnv[0]] = pkg.Source{
 				Name:       orgEnv[0],
 				SourceType: pkg.TypeOrganization,
 				Secret:     mustBase64Decode(orgEnv[1]),
 			}
-			log.Infof("Registered organization %s", orgEnv[0])
+			log.Infof("Registered webhook organization source: %s", orgEnv[0])
 		} else {
-			panic("Found duplicate source key: " + orgEnv[0])
+			log.Warnf("Found duplicate webhook source key - will be ignored: %s", orgEnv[0])
 		}
 	}
 
-	for _, repoEnv := range strings.Split(",", getEnvDefault("GITHUB_REPOS", "")) {
-		if repo := strings.Split(";", repoEnv); len(repo) == 2 {
+	for _, repoEnv := range strings.Split(getEnvDefault("GITHUB_REPOS", ""), ",") {
+		if repo := strings.Split(repoEnv, ";"); len(repo) == 2 {
 			if _, ok := config.RegisteredSources[repo[0]]; !ok {
 				config.RegisteredSources[repo[0]] = pkg.Source{
 					Name:       repo[0],
 					SourceType: pkg.TypeRepository,
 					Secret:     mustBase64Decode(repo[1]),
 				}
-				log.Infof("Registered repository %s", repo[0])
+				log.Infof("Registered webhook repository source: %s", repo[0])
 			} else {
-				panic("Found duplicate source key: " + repo[0])
+				log.Warnf("Found duplicate webhook source key - will be ignored: %s", repo[0])
 			}
 		}
 	}

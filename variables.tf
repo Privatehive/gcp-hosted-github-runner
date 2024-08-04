@@ -1,6 +1,6 @@
 variable "machine_type" {
   type        = string
-  description = "The VM instance machine type where the GitHub runner will run on"
+  description = "The VM instance machine type where the GitHub runner will run on."
   default     = "e2-micro"
 }
 
@@ -12,59 +12,65 @@ variable "machine_image" {
 
 variable "machine_preemtible" {
   type        = bool
-  description = "The VM instance will be an preemtible spot instance that costs much less but may be stop by gcp at any time (leading to a failed workflow job)."
+  description = "The VM instance will be an preemtible spot instance that costs much less but may be stopped by gcp at any time (leading to a failed workflow job)."
   default     = true
+}
+
+variable "machine_timeout" {
+  type        = number
+  description = "The maximum time a VM may run. Pick a number that is well outside the expected runner job timeouts but small enough to prevent unnecessary cost if a webhook event was lost or was not processed."
+  default     = 14400 // 4 h
 }
 
 variable "enable_ssh" {
   type        = bool
-  description = "Enable SSH access to the VM instances"
+  description = "Enable SSH access to the VM instances."
   default     = false
 }
 
 variable "use_cloud_nat" {
   type        = bool
-  description = "Use a cloud NAT and router instead of a public ip address for the VM instances"
+  description = "Use a cloud NAT and router instead of a public ip address for the VM instances."
   default     = false
 }
 
 variable "enable_debug" {
   type        = bool
-  description = "Enable debug messages of github-runner-autoscaler Cloud Run (WARNING: secrets will be leaked in log files)"
+  description = "Enable debug messages of github-runner-autoscaler Cloud Run (WARNING: secrets will be leaked in log files)."
   default     = false
 }
 
 variable "github_enterprise" {
   type        = string
-  description = "The name of the GitHub enterprise the runner will join"
+  description = "The name of the GitHub enterprise the runner will join."
   default     = ""
   validation {
-    condition     = length(var.github_enterprise) > 0 && length(var.github_organization) == 0 && length(var.github_repositories) == 0
+    condition     = length(var.github_enterprise) == 0 || (length(var.github_enterprise) > 0 && length(var.github_organization) == 0 && length(var.github_repositories) == 0)
     error_message = "The variable github_enterprise must not be used in combination with github_organization or github_repositories!"
   }
 }
 
 variable "github_organization" {
   type        = string
-  description = "The name of the GitHub organization the runner will join"
+  description = "The name of the GitHub organization the runner will join."
   default     = ""
 }
 
 variable "github_repositories" {
   type        = list(string)
-  description = "The name(s) of GitHub repositories the runner will join. The format of the repository is: OWNER/REPO"
+  description = "The name(s) of GitHub repositories the runner will join. The format of the repository is: OWNER/REPO."
   default     = []
 }
 
 variable "github_runner_group_id" {
   type        = number
-  description = "The ID of the GitHub runner group the runner will join"
+  description = "The ID of the GitHub runner group the runner will join."
   default     = 1
 }
 
 variable "github_runner_labels" {
   type        = list(string)
-  description = "One or multiple labels the runner will be tagged with"
+  description = "One or multiple labels the runner will be tagged with."
   default     = ["self-hosted"]
   validation {
     condition     = length(var.github_runner_labels) > 0
@@ -82,4 +88,16 @@ variable "github_runner_download_url" {
   type        = string
   description = "The download link pointing to the gitlab runner package"
   default     = "https://github.com/actions/runner/releases/download/v2.317.0/actions-runner-linux-x64-2.317.0.tar.gz"
+}
+
+variable "github_runner_uid" {
+  type        = number
+  description = "The uid the runner will be run with."
+  default     = 10000
+}
+
+variable "github_runner_packages" {
+  type        = list(string)
+  description = "Additional packages that will be installed in the runner with apt."
+  default     = []
 }

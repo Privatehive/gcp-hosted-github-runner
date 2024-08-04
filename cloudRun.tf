@@ -68,15 +68,15 @@ resource "google_cloud_run_v2_service" "autoscaler" {
       }
       env {
         name  = "GITHUB_ENTERPRISE"
-        value = format("%s;%s", var.github_enterprise, base64encode(random_password.webhook_enterprise_secret.result))
+        value = local.hasEnterprise ? format("%s;%s", var.github_enterprise, base64encode(random_password.webhook_enterprise_secret.result)) : ""
       }
       env {
         name  = "GITHUB_ORG"
-        value = format("%s;%s", var.github_organization, base64encode(random_password.webhook_org_secret.result))
+        value = local.hasOrg ? format("%s;%s", var.github_organization, base64encode(random_password.webhook_org_secret.result)) : ""
       }
       env {
         name  = "GITHUB_REPOS"
-        value = join(",", [for i, v in var.github_repositories : format("%s;%s", v, base64encode(random_password.webhook_repo_secret[v].result))])
+        value = local.hasRepo ? join(",", [for i, v in var.github_repositories : format("%s;%s", v, base64encode(random_password.webhook_repo_secret[v].result))]) : ""
       }
       env {
         name  = "SOURCE_QUERY_PARAM_NAME"

@@ -1,3 +1,7 @@
+locals {
+  github_runner_package_install = join(" ", var.github_runner_packages)
+}
+
 resource "google_compute_instance_template" "runner_instance" {
 
   name         = "ephemeral-github-runner"
@@ -10,8 +14,12 @@ resource "google_compute_instance_template" "runner_instance" {
     preemptible                 = var.machine_preemtible
     automatic_restart           = false
     on_host_maintenance         = "TERMINATE"
-    instance_termination_action = "STOP"
+    instance_termination_action = "DELETE"
     provisioning_model          = var.machine_preemtible ? "SPOT" : "STANDARD"
+
+    max_run_duration {
+      seconds = var.machine_timeout
+    }
   }
 
   disk {
@@ -48,7 +56,7 @@ resource "google_compute_project_metadata_item" "startup_scripts_register_runner
 #!/bin/bash
 echo "Setup of agent '$(hostname)' started"
 apt-get update && apt-get -y install docker.io docker-buildx curl
-useradd -d /home/agent -u 10000 agent
+useradd -d /home/agent -u ${var.github_runner_uid} agent
 usermod -aG docker agent
 newgrp docker
 curl -s -o /tmp/agent.tar.gz -L '${var.github_runner_download_url}'
@@ -74,8 +82,8 @@ resource "google_compute_project_metadata_item" "startup_scripts_register_jit_ru
 #!/bin/bash
 agent_name=$(hostname)
 echo "Setup of agent '$agent_name' started"
-apt-get update && apt-get -y install docker.io docker-buildx curl jq
-useradd -d /home/agent -u 10000 agent
+apt-get update && apt-get -y install docker.io docker-buildx curl jq ${local.github_runner_package_install}
+useradd -d /home/agent -u ${var.github_runner_uid} agent
 usermod -aG docker agent
 newgrp docker
 curl -s -o /tmp/agent.tar.gz -L '${var.github_runner_download_url}'
