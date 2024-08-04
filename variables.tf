@@ -44,10 +44,6 @@ variable "github_enterprise" {
   type        = string
   description = "The name of the GitHub enterprise the runner will join."
   default     = ""
-  validation {
-    condition     = length(var.github_enterprise) == 0 || (length(var.github_enterprise) > 0 && length(var.github_organization) == 0 && length(var.github_repositories) == 0)
-    error_message = "The variable github_enterprise must not be used in combination with github_organization or github_repositories!"
-  }
 }
 
 variable "github_organization" {

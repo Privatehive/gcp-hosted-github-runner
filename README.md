@@ -24,7 +24,7 @@ module "github-runner" {
   machine_type              = "c2d-highcpu-8" // The machine type of the VM instance.
   github_runner_group_id    = 1 // The GitHub Organization/Enterprise runner group ID. Has no effect for GitHub Repositories.
 
-  // Provide at least one of the following variables (github_enterprise can't be combined with github_organization or github_repositories):
+  // Provide only ONE of the following variables:
   github_enterprise         = "<enterprise_name>" // Provide the name of the GitHub Enterprise.
   github_organization       = "<organization_name>" // Provide the name of the GitHub Organization.
   github_repositories       = ["<repository_user/repository_name>"] // Provide USER/NAME of at least one GitHub Repository.
@@ -60,13 +60,13 @@ Have a look at the Terraform output `runner_webhook_config`. There you find the 
 #### 3. Provide PAT
 
 * For an **Enterprise**: Create a [Personal access token (PAT classic)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) with the "manage_runners:enterprise" scope.
-* For an **Organization**: Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Organization Read/Write permission "Self-hosted runners". 
-* For **Repositories**: Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the Repository permissions Read/Write "Administration".
+* For an **Organization**: Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the **Organization** Read/Write permission "Self-hosted runners". 
+* For **Repositories**: Create a [Fine-grained personal access token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) with the **Repository** permissions Read/Write "Administration".
 
 This PAT is needed to automatically create a [Enterprise](https://docs.github.com/en/enterprise-cloud@latest/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-enterprise), [Organization](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-an-organization), [Repository](https://docs.github.com/en/rest/actions/self-hosted-runners?apiVersion=2022-11-28#create-configuration-for-a-just-in-time-runner-for-a-repository) jit-config for each ephemeral runner to join the Repository or the runner group of an Enterprise/Organization. Then open the [Secret Manager](https://console.cloud.google.com/security/secret-manager) in the Google Cloud Console and add a new Version to the already existing secret "github-pat-token". Paste the PAT into the Secret value field and click "ADD NEW VERSION".
 
 > [!TIP]
-> Currently it is only possible to provide **one** PAT to the secret. That's why you can't combine an Enterprise with an Organization/Repository. The Enterprise needs a PAT classic; The Organization/Repository needs a Fine-grained PAT.
+> Currently it is only possible to provide **one** PAT to the secret. That's why you can't combine an Enterprise with an Organization or Repository.
 
 That's it 👍
 

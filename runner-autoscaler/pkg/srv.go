@@ -341,7 +341,7 @@ func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceNam
 
 func (s *Autoscaler) readPat(ctx context.Context) (string, error) {
 
-	log.Debugf("About to request GitHub runner registration token using PAT from secret version: %s", s.conf.SecretVersion)
+	log.Debugf("About to read PAT from secret version: %s", s.conf.SecretVersion)
 	secretAccessClient := newSecretAccessClient(ctx)
 	defer secretAccessClient.Close()
 	if secretResult, err := secretAccessClient.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
@@ -551,7 +551,7 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ORG_JIT_CONFIG_ENDPOINT, src.Name), string(data), s.conf.RunnerGroupId)
 			case TypeRepository:
 				log.Infof("Using jit config for runner registration for repository: %s", src.Name)
-				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), string(data), 0) // For repositories there is an implicit runner group with id 0
+				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), string(data), 1) // For repositories there is an implicit runner group with id 1
 			default:
 				log.Errorf("Missing source type for %s", src.Name)
 				ctx.Status(http.StatusBadRequest)
