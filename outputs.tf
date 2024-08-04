@@ -1,7 +1,7 @@
 locals {
-  webhook_enterprise_url = local.hasEnterprise ? [format("Create Enterprise webhook with Secret:   %s Payload URL %s%s?%s=%s", random_password.webhook_enterprise_secret.result, google_cloud_run_v2_service.autoscaler.uri, local.webhookUrl, local.sourceQueryParamName, urlencode(var.github_enterprise))] : []
-  webhook_org_url        = local.hasOrg ? [format("Create Organization webhook with Secret: %s Payload URL %s%s?%s=%s", random_password.webhook_org_secret.result, google_cloud_run_v2_service.autoscaler.uri, local.webhookUrl, local.sourceQueryParamName, urlencode(var.github_organization))] : []
-  webhook_repos_urls     = local.hasRepo ? [for i, v in var.github_repositories : format("Create Repository webhook with Secret:   %s Payload URL %s%s?%s=%s", random_password.webhook_repo_secret[v].result, google_cloud_run_v2_service.autoscaler.uri, local.webhookUrl, local.sourceQueryParamName, urlencode(v))] : []
+  webhook_enterprise_url = local.hasEnterprise ? [format("Create Enterprise webhook with Secret:   %s Payload URL: %s%s?%s=%s", random_password.webhook_enterprise_secret.result, google_cloud_run_v2_service.autoscaler.uri, local.webhookUrl, local.sourceQueryParamName, urlencode(var.github_enterprise))] : []
+  webhook_org_url        = local.hasOrg ? [format("Create Organization webhook with Secret: %s Payload URL: %s%s?%s=%s", random_password.webhook_org_secret.result, google_cloud_run_v2_service.autoscaler.uri, local.webhookUrl, local.sourceQueryParamName, urlencode(var.github_organization))] : []
+  webhook_repos_urls     = local.hasRepo ? [for i, v in var.github_repositories : format("Create Repository webhook with Secret:   %s Payload URL: %s%s?%s=%s", random_password.webhook_repo_secret[v].result, google_cloud_run_v2_service.autoscaler.uri, local.webhookUrl, local.sourceQueryParamName, urlencode(v))] : []
 }
 
 output "runner_webhook_config" {

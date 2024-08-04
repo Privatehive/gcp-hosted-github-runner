@@ -10,8 +10,8 @@ resource "random_password" "webhook_org_secret" {
 
 resource "random_password" "webhook_repo_secret" {
   for_each = toset(var.github_repositories)
-  length  = 24
-  special = true
+  length   = 24
+  special  = true
 }
 
 resource "google_cloud_run_v2_service" "autoscaler" {
@@ -29,7 +29,7 @@ resource "google_cloud_run_v2_service" "autoscaler" {
       max_instance_count = 1
     }
     containers {
-      image = "${local.region}-docker.pkg.dev/${local.projectId}/${google_artifact_registry_repository.ghcr.name}/privatehive/github-runner-autoscaler:latest"
+      image = "${local.region}-docker.pkg.dev/${local.projectId}/${google_artifact_registry_repository.ghcr.name}/${local.runnerDockerImage}:${local.runnerDockerTag}"
       env {
         name  = "ROUTE_WEBHOOK"
         value = local.webhookUrl
@@ -81,6 +81,13 @@ resource "google_cloud_run_v2_service" "autoscaler" {
       env {
         name  = "SOURCE_QUERY_PARAM_NAME"
         value = local.sourceQueryParamName
+      }
+      dynamic "env" {
+        for_each = var.force_cloud_run_deployment ? [0] : []
+        content {
+          name  = "TIMESTAMP"
+          value = timestamp()
+        }
       }
       dynamic "env" {
         for_each = var.enable_debug ? [0] : []

@@ -101,3 +101,9 @@ variable "github_runner_packages" {
   description = "Additional packages that will be installed in the runner with apt."
   default     = []
 }
+
+variable "force_cloud_run_deployment" {
+  type        = bool
+  description = "Use only for development. Each Terraform apply leads to a new revision of the cloud run."
+  default     = false
+}

@@ -403,7 +403,7 @@ func (s *Autoscaler) GenerateRunnerRegistrationToken(ctx context.Context) (strin
 
 func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, url string, runnerName string, runnerGroupId int64) (string, error) {
 
-	log.Debugf("About to request GitHub runner jit config using PAT from secret version: %s", s.conf.SecretVersion)
+	log.Debugf("About to request GitHub runner %s jit config from %s (runner group %d) using PAT from secret version: %s", runnerName, url, runnerGroupId, s.conf.SecretVersion)
 	secretAccessClient := newSecretAccessClient(ctx)
 	defer secretAccessClient.Close()
 	if pat, err := s.readPat(ctx); err != nil {

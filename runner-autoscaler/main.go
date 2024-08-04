@@ -56,7 +56,12 @@ func main() {
 			logrus.FieldKeyMsg:   "message",
 		},
 	})
-	logrus.SetLevel(logrus.InfoLevel)
+
+	if dbg := getEnvDefaultInt64("DEBUG", 0); dbg == 1 {
+		logrus.SetLevel(logrus.DebugLevel)
+	} else {
+		logrus.SetLevel(logrus.InfoLevel)
+	}
 
 	config := pkg.AutoscalerConfig{
 		RouteWebhook:      getEnvDefault("ROUTE_WEBHOOK", "/webhook"),

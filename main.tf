@@ -25,6 +25,8 @@ locals {
   hasOrg                      = length(var.github_organization) > 0
   hasRepo                     = length(var.github_repositories) > 0
   sourceQueryParamName        = "src"
+  runnerDockerImage           = "privatehive/github-runner-autoscaler"
+  runnerDockerTag             = "latest"
 }
 
 resource "google_project_service" "compute_api" {
