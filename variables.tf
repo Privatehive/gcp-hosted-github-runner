@@ -92,6 +92,12 @@ variable "github_runner_uid" {
   default     = 10000
 }
 
+variable "github_runner_gid" {
+  type        = number
+  description = "The gid the runner will be run with."
+  default     = 10000
+}
+
 variable "github_runner_packages" {
   type        = list(string)
   description = "Additional packages that will be installed in the runner with apt."

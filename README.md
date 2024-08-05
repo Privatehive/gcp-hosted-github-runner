@@ -85,6 +85,18 @@ Have a look at the [variables.tf](./variables.tf) file how to further configure 
 * Provides docker-daemon and docker-buildx by default. Additional packages can be installed with `github_runner_packages`.
 * Only works with images that are based on debian (rely on apt package manager). Runs image `ubuntu-minimal-2004-lts` by default. Change with `machine_image`.
 
+#### Magic Labels
+
+Each workflow job can select a different machine type than the configured default `machine_type`. This is done by the special label `@machine:c2d-standard-16`.
+
+```
+jobs:
+  example:
+    runs-on: [self-hosted, @machine:c2d-standard-16] // this job will run on a c2d-standard-16 machine
+    steps:
+    - run: echo Hello world!
+```
+
 ## Expected Cost
 
 The following Google Cloud resources are created that may generate cost:

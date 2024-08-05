@@ -77,6 +77,11 @@ type Payload struct {
 	Job    Job    `json:"workflow_job"`
 }
 
+type VmSettings struct {
+	Name        string  `json:"name"`
+	MachineType *string `json:"machineType,omitempty"`
+}
+
 func (j Job) hasLabel(label string) bool {
 
 	for _, l := range j.Labels {
@@ -85,6 +90,18 @@ func (j Job) hasLabel(label string) bool {
 		}
 	}
 	return false
+}
+
+func (j Job) getMagicLabel(key string) *string {
+
+	labelKey := "@" + key + ":"
+	for _, l := range j.Labels {
+		if strings.HasPrefix(l, labelKey) {
+			ret := l[len(labelKey):]
+			return &ret
+		}
+	}
+	return nil
 }
 
 // returns true if all labels were found. false otherwise. Returns also all labels that were missing
@@ -314,17 +331,23 @@ func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) er
 }
 
 // blocking until instance started or failed to start
-func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceName string, metadata ...*computepb.Items) error {
+func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceName string, machineType *string, metadata ...*computepb.Items) error {
 
 	log.Debugf("About to create instance %s from template", instanceName)
 	computeClient := newComputeClient(ctx)
 	defer computeClient.Close()
 
+	var machine *string = nil
+	if machineType != nil {
+		machine = proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", s.conf.Zone, *machineType))
+	}
+
 	if res, err := computeClient.Insert(ctx, &computepb.InsertInstanceRequest{
 		Project: s.conf.ProjectId,
 		Zone:    s.conf.Zone,
 		InstanceResource: &computepb.Instance{
-			Name: proto.String(instanceName),
+			Name:        proto.String(instanceName),
+			MachineType: machine,
 			Metadata: &computepb.Metadata{
 				Items: metadata,
 			},
@@ -453,8 +476,9 @@ func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, url string, ru
 	}
 }
 
-func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string, secret string, payload string) error {
+func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string, secret string, settings VmSettings) error {
 
+	data, _ := json.Marshal(settings)
 	now := timestamppb.Now()
 	now.Seconds += 1 // delay the callback a little bit
 	req := &taskspb.CreateTaskRequest{
@@ -470,14 +494,14 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string
 					HttpMethod: taskspb.HttpMethod_POST,
 					Url:        url,
 					Headers: map[string]string{
-						SHA_HEADER: SHA_PREFIX + calcSigHex([]byte(secret), []byte(payload)),
+						SHA_HEADER: SHA_PREFIX + calcSigHex([]byte(secret), []byte(data)),
 					},
 				},
 			},
 		},
 	}
 
-	req.Task.GetHttpRequest().Body = []byte(payload)
+	req.Task.GetHttpRequest().Body = []byte(data)
 
 	client := newTaskClient(ctx)
 	defer client.Close()
@@ -485,7 +509,7 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string
 	if err != nil {
 		return fmt.Errorf("cloudtasks.CreateTask failed: %v", err)
 	} else {
-		log.Infof("Created cloud task callback with url \"%s\" and payload \"%s\"", url, payload)
+		log.Infof("Created cloud task callback with url \"%s\" and payload \"%s\"", url, data)
 	}
 
 	return nil
@@ -521,13 +545,13 @@ func (s *Autoscaler) createVmWithRegistrationToken(ctx *gin.Context, instanceNam
 	}
 }*/
 
-func (s *Autoscaler) createVmWithJitConfig(ctx *gin.Context, url string, instanceName string, runnerGroupId int64) {
+func (s *Autoscaler) createVmWithJitConfig(ctx *gin.Context, url string, runnerGroupId int64, settings VmSettings) {
 
-	if jitConfig, err := s.GenerateRunnerJitConfig(ctx, url, instanceName, runnerGroupId); err != nil {
+	if jitConfig, err := s.GenerateRunnerJitConfig(ctx, url, settings.Name, runnerGroupId); err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, err)
 	} else {
 		jit_config_attr := fmt.Sprintf("%s_%s", RUNNER_JIT_CONFIG_ATTR, RandStringRunes(16))
-		if err := s.CreateInstanceFromTemplate(ctx, instanceName, &computepb.Items{
+		if err := s.CreateInstanceFromTemplate(ctx, settings.Name, settings.MachineType, &computepb.Items{
 			Key:   proto.String(jit_config_attr),
 			Value: proto.String(jitConfig),
 		}, &computepb.Items{
@@ -545,27 +569,22 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 
 	log.Info("Received create-vm cloud task callback")
 	if data, src, err := s.verifySignature(ctx); err == nil {
-		if s.conf.RunnerGroupId > 0 {
-			// use jit config
-			switch src.SourceType {
-			case TypeEnterprise:
-				log.Infof("Using jit config for runner registration for enterprise: %s", src.Name)
-				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ENTERPRISE_JIT_CONFIG_ENDPOINT, src.Name), string(data), s.conf.RunnerGroupId)
-			case TypeOrganization:
-				log.Infof("Using jit config for runner registration for organization: %s", src.Name)
-				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ORG_JIT_CONFIG_ENDPOINT, src.Name), string(data), s.conf.RunnerGroupId)
-			case TypeRepository:
-				log.Infof("Using jit config for runner registration for repository: %s", src.Name)
-				s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), string(data), 1) // For repositories there is an implicit runner group with id 1
-			default:
-				log.Errorf("Missing source type for %s", src.Name)
-				ctx.Status(http.StatusBadRequest)
-			}
-		} else {
-			// use registration token
-			log.Error("Registration via registration token deactivated")
-			ctx.Status(http.StatusNotImplemented)
-			//s.createVmWithRegistrationToken(ctx, string(data))
+		vmSettings := VmSettings{}
+		json.Unmarshal(data, &vmSettings)
+		// use jit config
+		switch src.SourceType {
+		case TypeEnterprise:
+			log.Infof("Using jit config for runner registration for enterprise: %s", src.Name)
+			s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ENTERPRISE_JIT_CONFIG_ENDPOINT, src.Name), s.conf.RunnerGroupId, vmSettings)
+		case TypeOrganization:
+			log.Infof("Using jit config for runner registration for organization: %s", src.Name)
+			s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_ORG_JIT_CONFIG_ENDPOINT, src.Name), s.conf.RunnerGroupId, vmSettings)
+		case TypeRepository:
+			log.Infof("Using jit config for runner registration for repository: %s", src.Name)
+			s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), 1, vmSettings) // For repositories there is an implicit runner group with id 1
+		default:
+			log.Errorf("Missing source type for %s", src.Name)
+			ctx.Status(http.StatusBadRequest)
 		}
 	}
 }
@@ -574,7 +593,9 @@ func (s *Autoscaler) handleDeleteVm(ctx *gin.Context) {
 
 	log.Info("Received delete-vm cloud task callback")
 	if data, _, err := s.verifySignature(ctx); err == nil {
-		if err := s.DeleteInstance(ctx, string(data)); err != nil {
+		vmSettings := VmSettings{}
+		json.Unmarshal(data, &vmSettings)
+		if err := s.DeleteInstance(ctx, vmSettings.Name); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
 			ctx.Status(http.StatusOK)
@@ -600,7 +621,10 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				if payload.Action == QUEUED {
 					if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
 						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateVm, s.conf.SourceQueryParam, src.Name)
-						if err := s.createCallbackTaskWithToken(ctx, createUrl, src.Secret, fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, RandStringRunes(10))); err != nil {
+						if err := s.createCallbackTaskWithToken(ctx, createUrl, src.Secret, VmSettings{
+							Name:        fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, RandStringRunes(10)),
+							MachineType: payload.Job.getMagicLabel("machine"),
+						}); err != nil {
 							log.Errorf("Can not enqueue create-vm cloud task callback: %s", err.Error())
 							ctx.AbortWithError(http.StatusInternalServerError, err)
 							return
@@ -616,7 +640,9 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 					if payload.Job.RunnerGroupId == runnerGroupId {
 						if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
 							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm, s.conf.SourceQueryParam, src.Name)
-							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, src.Secret, payload.Job.RunnerName); err != nil {
+							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, src.Secret, VmSettings{
+								Name: payload.Job.RunnerName,
+							}); err != nil {
 								log.Errorf("Can not enqueue delete-vm cloud task callback: %s", err.Error())
 								ctx.AbortWithError(http.StatusInternalServerError, err)
 								return
@@ -625,7 +651,7 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 							log.Warnf("Webhook signaled to delete a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 						}
 					} else {
-						log.Warnf("Webhook signaled to delete a runner that does not belong to the expected runner group (expected \"%d\" got \"%d\") - ignoring", s.conf.RunnerGroupId, payload.Job.RunnerGroupId)
+						log.Warnf("Webhook signaled to delete a runner that does not belong to the expected runner group (expected \"%d\" got \"%d\") - ignoring", runnerGroupId, payload.Job.RunnerGroupId)
 					}
 				}
 				ctx.Status(http.StatusOK)
