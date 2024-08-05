@@ -609,7 +609,11 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 						log.Warnf("Webhook requested to start a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 					}
 				} else if payload.Action == COMPLETED {
-					if payload.Job.RunnerGroupId == int64(s.conf.RunnerGroupId) {
+					runnerGroupId := s.conf.RunnerGroupId
+					if src.SourceType == TypeRepository {
+						runnerGroupId = 1
+					}
+					if payload.Job.RunnerGroupId == runnerGroupId {
 						if ok, missingLabels := payload.Job.hasAllLabels(s.conf.RunnerLabels); ok {
 							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm, s.conf.SourceQueryParam, src.Name)
 							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, src.Secret, payload.Job.RunnerName); err != nil {
