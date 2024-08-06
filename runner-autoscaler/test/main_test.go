@@ -78,7 +78,31 @@ func TestGenerateRunnerJitConfig(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	jitConfig, err := scaler.GenerateRunnerJitConfig(ctx, fmt.Sprintf(pkg.RUNNER_REPO_JIT_CONFIG_ENDPOINT, TEST_REPO), "unit_test_runner_"+pkg.RandStringRunes(10), 1)
+	jitConfig, err := scaler.GenerateRunnerJitConfig(ctx, fmt.Sprintf(pkg.RUNNER_REPO_JIT_CONFIG_ENDPOINT, TEST_REPO), "unit_test_runner_"+pkg.RandStringRunes(10), 1, []string{"self-hosted"})
 	assert.Nil(t, err)
 	assert.NotEmpty(t, jitConfig)
+}
+
+func TestGetMagicLabelValue(t *testing.T) {
+
+	job := pkg.Job{
+		Labels: []string{"test", "@foo:bar", "@machine:test"},
+	}
+	result := job.GetMagicLabelValue(pkg.MagicLabelMachine)
+	assert.NotNil(t, result)
+	assert.Equal(t, "test", *result)
+}
+
+func TestHasAllLabels(t *testing.T) {
+
+	job := pkg.Job{
+		Labels: []string{"test", "@foo:bar", "@machine:test"},
+	}
+	result, missing := job.HasAllLabels([]string{"test"})
+	assert.True(t, result)
+	assert.Empty(t, missing)
+	result, missing = job.HasAllLabels([]string{"test", "foo"})
+	assert.False(t, result)
+	assert.NotEmpty(t, missing)
+	assert.Len(t, missing, 1)
 }

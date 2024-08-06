@@ -83,7 +83,7 @@ resource "google_compute_project_metadata_item" "startup_scripts_register_jit_ru
 agent_name=$(hostname)
 echo "Setup of agent '$agent_name' started"
 apt-get update && apt-get -y install docker.io docker-buildx curl jq ${local.github_runner_package_install}
-useradd -d /home/agent -u ${var.github_runner_uid} -g ${var.github_runner_gid} agent
+useradd -d /home/agent -u ${var.github_runner_uid} agent
 usermod -aG docker agent
 newgrp docker
 curl -s -o /tmp/agent.tar.gz -L '${var.github_runner_download_url}'
