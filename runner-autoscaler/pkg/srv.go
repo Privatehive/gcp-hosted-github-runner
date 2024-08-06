@@ -625,9 +625,9 @@ func (s *Autoscaler) handleDeleteVm(ctx *gin.Context) {
 
 	log.Info("Received delete-vm cloud task callback")
 	if data, _, err := s.verifySignature(ctx); err == nil {
-		vmSettings := VmSettings{}
-		json.Unmarshal(data, &vmSettings)
-		if err := s.DeleteInstance(ctx, vmSettings.Name); err != nil {
+		job := Job{}
+		json.Unmarshal(data, &job)
+		if err := s.DeleteInstance(ctx, job.RunnerName); err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err)
 		} else {
 			ctx.Status(http.StatusOK)
