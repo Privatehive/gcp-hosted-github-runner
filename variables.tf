@@ -83,7 +83,7 @@ variable "github_runner_prefix" {
 variable "github_runner_download_url" {
   type        = string
   description = "The download link pointing to the gitlab runner package"
-  default     = "https://github.com/actions/runner/releases/download/v2.319.1/actions-runner-linux-x64-2.319.1.tar.gz"
+  default     = "https://github.com/actions/runner/releases/download/v2.321.0/actions-runner-linux-x64-2.321.0.tar.gz"
 }
 
 variable "github_runner_uid" {
