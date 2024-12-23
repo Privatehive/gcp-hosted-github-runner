@@ -87,7 +87,7 @@ Have a look at the [variables.tf](./variables.tf) file how to further configure 
 
 #### Magic Labels
 
-Each workflow job can select a different machine type than the configured default `machine_type`. This is done by the special label `@machine:c2d-standard-16`.
+Each workflow job can select a different machine type than the configured default `machine_type`. This is done by the special label `@machine:c2d-standard-16`. Make sure that the configured `disk_type` is supported by the machine.
 
 ```
 jobs:

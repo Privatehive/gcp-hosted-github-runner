@@ -26,8 +26,8 @@ resource "google_compute_instance_template" "runner_instance" {
     auto_delete  = true
     boot         = true
     source_image = var.machine_image
-    disk_type    = "pd-standard"
-    disk_size_gb = 40
+    disk_type    = var.disk_type
+    disk_size_gb = var.disk_size_gb
   }
 
   service_account {

@@ -4,6 +4,18 @@ variable "machine_type" {
   default     = "e2-micro"
 }
 
+variable "disk_type" {
+  type        = string
+  description = "The VM instance disk type"
+  default     = "pd-standard"
+}
+
+variable "disk_size_gb" {
+  type        = number
+  description = "The VM disk size"
+  default     = 40
+}
+
 variable "machine_image" {
   type        = string
   description = "The VM instance boot image (gcloud compute images list --filter ubuntu-os). Only Linux is supported!"
