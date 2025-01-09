@@ -142,7 +142,7 @@ Overall, only the compute instance accounts for the "majority" of the costs.
 
 The terraform error looks something like this:
 ```
-Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": Error setting IAM policy for cloudrun service "v1/projects/github-spot-runner/locations/us-east1/services/cloudrun-service": googleapi: Error 400: One or more users named in the policy do not belong to a permitted customer, perhaps due to an Organization policy
+Error applying IAM policy for cloudrun service "v1/projects/my-gcp-project-id/locations/us-east1/services/cloudrun-service": Error setting IAM policy for cloudrun service "v1/projects/my-gcp-project-id/locations/us-east1/services/cloudrun-service": googleapi: Error 400: One or more users named in the policy do not belong to a permitted customer, perhaps due to an Organization policy
 ```
 
 1. Solution: Use project tags: [How to create public Cloud Run services when Domain Restricted Sharing is enforced](https://cloud.google.com/blog/topics/developers-practitioners/how-create-public-cloud-run-services-when-domain-restricted-sharing-enforced?hl=en)

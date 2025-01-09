@@ -12,11 +12,11 @@
             "program": "main.go",
             "output": "debug",
             "env": {
-                "PROJECT_ID": "github-spot-runner",
-                "ZONE": "europe-west1-c",
-                "TASK_QUEUE": "projects/github-spot-runner/locations/europe-west1/queues/autoscaler-callback-queue",
-                "INSTANCE_TEMPLATE": "projects/github-spot-runner/global/instanceTemplates/ephemeral-github-runner",
-                "SECRET_VERSION": "projects/github-spot-runner/secrets/github-pat-token/versions/latest",
+                "PROJECT_ID": "my-gcp-project-id",
+                "ZONE": "us-east1-c",
+                "TASK_QUEUE": "projects/my-gcp-project-id/locations/us-east1/queues/autoscaler-callback-queue",
+                "INSTANCE_TEMPLATE": "projects/my-gcp-project-id/global/instanceTemplates/ephemeral-github-runner",
+                "SECRET_VERSION": "projects/my-gcp-project-id/secrets/github-pat-token/versions/latest",
                 "GITHUB_ENTERPRISE": "Enterprise;dmVyeXNlY3JldA==",
                 "GITHUB_ORG": "Organization;dmVyeXNlY3JldA==",
                 "GITHUB_REPOS": "User/Repo1;dmVyeXNlY3JldA==,User/Repo2;dmVyeXNlY3JldA=="

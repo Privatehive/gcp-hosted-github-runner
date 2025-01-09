@@ -17,9 +17,9 @@ var PORT = 9999
 
 var scaler *pkg.Autoscaler
 
-const PROJECT_ID = "github-spot-runner"
-const REGION = "europe-west1"
-const ZONE = "europe-west1-c"
+const PROJECT_ID = "my-gcp-project-id"
+const REGION = "us-east1"
+const ZONE = "us-east1-c"
 const GIT_HUB_ORG = "Privatehive"
 const TEST_REPO = "Privatehive/runner-test"
 const TEST_REPO_KEY = "repository-" + TEST_REPO
