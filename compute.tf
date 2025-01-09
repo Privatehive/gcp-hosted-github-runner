@@ -86,7 +86,13 @@ apt-get update && apt-get -y install docker.io docker-buildx curl jq ${local.git
 useradd -d /home/agent -u ${var.github_runner_uid} agent
 usermod -aG docker agent
 newgrp docker
-curl -s -o /tmp/agent.tar.gz -L '${var.github_runner_download_url}'
+RUNNER_DOWNLOAD_URL='${var.github_runner_download_url}'
+if [ -z "$${RUNNER_DOWNLOAD_URL}" ]; then
+  RUNNER_VERSION=$(curl -s "https://github.com/actions/runner/tags/" | grep -Eo "$Version v[0-9]+.[0-9]+.[0-9]+" | sort -r | head -n1 | tr -d ' ' | tr -d 'v')
+  echo "Downloading latest runner v$${RUNNER_VERSION}"
+  RUNNER_DOWNLOAD_URL="https://github.com/actions/runner/releases/download/v$${RUNNER_VERSION}/actions-runner-linux-x64-$${RUNNER_VERSION}.tar.gz"
+fi
+curl -s -o /tmp/agent.tar.gz -L $${RUNNER_DOWNLOAD_URL}
 mkdir -p /home/agent
 chown -R agent:agent /home/agent
 pushd /home/agent
@@ -95,14 +101,17 @@ encoded_jit_config=$1
 echo -n $encoded_jit_config | base64 -d | jq '.".runner"' -r | base64 -d > .runner
 echo -n $encoded_jit_config | base64 -d | jq '.".credentials"' -r | base64 -d > .credentials
 echo -n $encoded_jit_config | base64 -d | jq '.".credentials_rsaparams"' -r | base64 -d > .credentials_rsaparams
-sed -i 's/{{SvcNameVar}}/actions.runner.${var.github_organization}.$${agent_name}.service/g' bin/systemd.svc.sh.template
-sed -i 's/{{SvcDescription}}/GitHub Actions Runner (${var.github_organization}.$${agent_name})/g' bin/systemd.svc.sh.template
+sed -i 's/{{SvcNameVar}}/actions.runner.service/g' bin/systemd.svc.sh.template
+sed -i 's/{{SvcDescription}}/GitHub Actions Runner/g' bin/systemd.svc.sh.template
 cp bin/systemd.svc.sh.template ./svc.sh && chmod +x ./svc.sh
 ./bin/installdependencies.sh || shutdown now
 ./svc.sh install agent || shutdown now
 ./svc.sh start || shutdown now
 popd
 rm /tmp/agent.tar.gz
-echo "Setup finished"
+echo "Setup finished - waiting for Workflow Job"
+sleep 60
+journalctl -u actions.runner.service -o json --no-pager | jq -e '.|.MESSAGE|match("Running job:")' || shutdown now
+echo "Accepted Workflow Job - processing"
 EOT
 }

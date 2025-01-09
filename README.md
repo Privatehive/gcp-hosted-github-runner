@@ -149,12 +149,13 @@ Error applying IAM policy for cloudrun service "v1/projects/github-spot-runner/l
 
 2. Solution: Override the Organization Policy "Domain Restricted Sharing" in the project, by setting it to "Allow all".
 
-#### The VM Instance immediately stops after it was created without processing a workflow job
+#### The VM instance stops shortly after it was created without processing a workflow task
 
-The VM will shoutdown itself if the registration at the GitHub runner group fails. This can be caused by:
-* An invalid jit-config.
+The VM will stop itself if the registration at the GitHub runner group fails. This can be caused by:
 * A typo in the GitHub Enterprise, Organization, Repository name. Check the Terraform variables `github_enterprise`, `github_organization`, `github_repositories` for typos.
 * A not existing GitHub runner group within the Enterprise/Organization. Check the Terraform variable `github_runner_group` for typos.
+* The GitHub runner version is [deprecated](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners#controlling-runner-software-updates-on-self-hosted-runners). The GitHub runner won't accept any Workflow job. Check the Terraform variable `github_runner_download_url` and update to latest GitHub runner version.
+* An invalid jit-config.
 
 You can observer the runner registration process by connecting to the VM instance via SSH and running:
 ```
