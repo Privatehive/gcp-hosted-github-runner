@@ -3,6 +3,8 @@ package test
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -64,16 +66,6 @@ func TestWebhookSignature(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 }
 
-/*
-func TestGenerateRunnerRegistrationToken(t *testing.T) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	token, err := scaler.GenerateRunnerRegistrationToken(ctx)
-	assert.Nil(t, err)
-	assert.NotEmpty(t, token)
-}*/
-
 func TestGenerateRunnerJitConfig(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -91,6 +83,18 @@ func TestGetMagicLabelValue(t *testing.T) {
 	result := job.GetMagicLabelValue(pkg.MagicLabelMachine)
 	assert.NotNil(t, result)
 	assert.Equal(t, "test", *result)
+}
+
+func TestCreateCallbackTask(t *testing.T) {
+
+	job := pkg.Job{
+		Id:     rand.Int63n(math.MaxInt64),
+		Labels: []string{"test", "@foo:bar", "@machine:test"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	err := scaler.DeleteCallbackTask(ctx, job)
+	assert.Nil(t, err)
 }
 
 func TestHasAllLabels(t *testing.T) {

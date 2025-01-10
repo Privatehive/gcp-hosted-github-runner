@@ -30,10 +30,10 @@ resource "google_project_iam_custom_role" "manage_vm_instances" {
   permissions = ["compute.instances.get", "compute.instances.start", "compute.instances.stop", "compute.instances.delete", "compute.instances.create", "compute.instances.setMetadata", "compute.instances.setTags", "compute.instances.setServiceAccount"]
 }
 
-resource "google_project_iam_custom_role" "create_cloud_task" {
-  role_id     = "CreateCloudTask"
-  title       = "Create a Cloud Task"
-  permissions = ["cloudtasks.tasks.create"]
+resource "google_project_iam_custom_role" "create_delete_cloud_task" {
+  role_id     = "CreateDeleteCloudTask"
+  title       = "Create/Delete a Cloud Task"
+  permissions = ["cloudtasks.tasks.create", "cloudtasks.tasks.delete"]
 }
 
 resource "google_project_iam_custom_role" "create_vm_from_instance_template" {
@@ -71,10 +71,10 @@ resource "google_project_iam_member" "manage_vm_instances_member" {
   }
 }
 
-resource "google_project_iam_member" "create_cloud_task_member" {
+resource "google_project_iam_member" "create_delete_cloud_task_member" {
   project = local.projectId
   member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
-  role    = google_project_iam_custom_role.create_cloud_task.id
+  role    = google_project_iam_custom_role.create_delete_cloud_task.id
 
   # DOES NOT WORK
   #condition {
