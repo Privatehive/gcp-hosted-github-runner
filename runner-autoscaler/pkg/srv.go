@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	taskspb "cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
@@ -498,16 +499,17 @@ func (s *Autoscaler) GenerateRunnerJitConfig(ctx context.Context, url string, ru
 	}
 }
 
-func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string, secret string, job Job) error {
+func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string, secret string, job Job, delay time.Duration) error {
 
 	data, _ := json.Marshal(job)
 	now := timestamppb.Now()
-	now.Seconds += 1 // delay the callback a little bit
+	now.Seconds += int64(delay.Seconds())
 	req := &taskspb.CreateTaskRequest{
 		Parent: s.conf.TaskQueue,
 		Task: &taskspb.Task{
+			Name: fmt.Sprintf("%s/tasks/%d", s.conf.TaskQueue, job.Id),
 			DispatchDeadline: &durationpb.Duration{
-				Seconds: 120, // the timeout of the cloud task callback
+				Seconds: 120, // the timeout of the cloud task callback - must be greater the time it takes to start the VM
 				Nanos:   0,
 			},
 			ScheduleTime: now,
@@ -529,11 +531,25 @@ func (s *Autoscaler) createCallbackTaskWithToken(ctx context.Context, url string
 	defer client.Close()
 	_, err := client.CreateTask(ctx, req)
 	if err != nil {
-		return fmt.Errorf("cloudtasks.CreateTask failed: %v", err)
+		return fmt.Errorf("cloudtasks.CreateTask failed for job Id %d: %v", job.Id, err)
 	} else {
-		log.Infof("Created cloud task callback with url \"%s\" and payload \"%s\"", url, data)
+		log.Infof("Created cloud task callback for workflow job Id %d with url \"%s\" and payload \"%s\"", job.Id, url, data)
 	}
+	return nil
+}
 
+func (s *Autoscaler) deleteCallbackTask(ctx context.Context, job Job) error {
+
+	client := newTaskClient(ctx)
+	defer client.Close()
+	err := client.DeleteTask(ctx, &taskspb.DeleteTaskRequest{
+		Name: fmt.Sprintf("%s/tasks/%d", s.conf.TaskQueue, job.Id),
+	})
+	if err != nil {
+		return fmt.Errorf("cloudtasks.DeleteTask failed for job Id %d: %v", job.Id, err)
+	} else {
+		log.Infof("Deleted cloud task callback for workflow job Id %d", job.Id)
+	}
 	return nil
 }
 
@@ -609,7 +625,7 @@ func (s *Autoscaler) handleCreateVm(ctx *gin.Context) {
 			}, job.Labels)
 		case TypeRepository:
 			log.Infof("Using jit config for runner registration for repository: %s", src.Name)
-			// For repositories there is an implicit runner group with id 1
+			// for repositories there is an implicit runner group with id 1
 			s.createVmWithJitConfig(ctx, fmt.Sprintf(RUNNER_REPO_JIT_CONFIG_ENDPOINT, src.Name), 1, VmSettings{
 				Name:        fmt.Sprintf("%s-%s", s.conf.RunnerPrefix, RandStringRunes(10)),
 				MachineType: job.GetMagicLabelValue(MagicLabelMachine),
@@ -653,13 +669,24 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 				if payload.Action == QUEUED {
 					if ok, missingLabels := payload.Job.HasAllLabels(s.conf.RunnerLabels); ok {
 						createUrl := createCallbackUrl(ctx, s.conf.RouteCreateVm, s.conf.SourceQueryParam, src.Name)
-						if err := s.createCallbackTaskWithToken(ctx, createUrl, src.Secret, payload.Job); err != nil {
+						// delay the create vm callback so we have a chance to delete it if the workflow job is changing its state to 'waiting'
+						if err := s.createCallbackTaskWithToken(ctx, createUrl, src.Secret, payload.Job, time.Duration(s.conf.CreateVmDelay)*time.Second); err != nil {
 							log.Errorf("Can not enqueue create-vm cloud task callback: %s", err.Error())
 							ctx.AbortWithError(http.StatusInternalServerError, err)
 							return
 						}
 					} else {
 						log.Warnf("Webhook requested to start a runner that is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
+					}
+				} else if payload.Action == WAITING {
+					// the waiting action happens if a deployment environment is configured in the workflow that requires a review. We have to cancel the cloud task callback
+					if ok, missingLabels := payload.Job.HasAllLabels(s.conf.RunnerLabels); ok {
+						if err := s.deleteCallbackTask(ctx, payload.Job); err != nil {
+							// best effort - this is not considered an error
+							log.Warnf("Can not delete create-vm cloud task callback: %s", err.Error())
+						}
+					} else {
+						log.Warnf("Webhook signals 'wait' but is missing the label(s) \"%s\" - ignoring", strings.Join(missingLabels, ", "))
 					}
 				} else if payload.Action == COMPLETED {
 					runnerGroupId := s.conf.RunnerGroupId
@@ -668,8 +695,12 @@ func (s *Autoscaler) handleWebhook(ctx *gin.Context) {
 					}
 					if payload.Job.RunnerGroupId == runnerGroupId {
 						if ok, missingLabels := payload.Job.HasAllLabels(s.conf.RunnerLabels); ok {
+
+							// if the user immediately cancels a workflow we have the chance to delete the callback if not older than 10 seconds - best effort, ignore all errors
+							s.deleteCallbackTask(ctx, payload.Job)
+
 							deleteUrl := createCallbackUrl(ctx, s.conf.RouteDeleteVm, s.conf.SourceQueryParam, src.Name)
-							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, src.Secret, payload.Job); err != nil {
+							if err := s.createCallbackTaskWithToken(ctx, deleteUrl, src.Secret, payload.Job, 1*time.Second); err != nil {
 								log.Errorf("Can not enqueue delete-vm cloud task callback: %s", err.Error())
 								ctx.AbortWithError(http.StatusInternalServerError, err)
 								return
@@ -713,6 +744,7 @@ type AutoscalerConfig struct {
 	RunnerLabels      []string
 	RegisteredSources map[string]Source
 	SourceQueryParam  string
+	CreateVmDelay     int64
 }
 
 type Autoscaler struct {

@@ -77,6 +77,7 @@ func main() {
 		RunnerLabels:      []string{},
 		RegisteredSources: map[string]pkg.Source{},
 		SourceQueryParam:  getEnvDefault("SOURCE_QUERY_PARAM_NAME", "src"),
+		CreateVmDelay:     getEnvDefaultInt64("CREATE_VM_DELAY", 10),
 	}
 
 	if enterpriseEnv := strings.Split(getEnvDefault("GITHUB_ENTERPRISE", ""), ";"); len(enterpriseEnv) == 2 {
