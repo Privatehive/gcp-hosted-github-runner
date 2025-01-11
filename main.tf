@@ -26,7 +26,7 @@ locals {
   hasRepo                     = length(var.github_repositories) > 0
   sourceQueryParamName        = "src"
   runnerDockerImage           = "privatehive/github-runner-autoscaler"
-  runnerDockerTag             = "latest"
+  runnerDockerTag             = local.autoscaler_version
 }
 
 resource "google_project_service" "compute_api" {

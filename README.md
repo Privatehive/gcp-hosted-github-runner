@@ -21,7 +21,7 @@ provider "google" {
 
 module "github-runner" {
   source                    = "github.com/Privatehive/gcp-hosted-github-runner"
-  machine_type              = "c2d-highcpu-8" // The machine type of the VM instance.
+  machine_type              = "c2d-highcpu-8" // The default machine type of the VM instance.
   github_runner_group_id    = 1 // The GitHub Organization/Enterprise runner group ID. Has no effect for GitHub Repositories.
 
   // Provide only ONE of the following variables:
@@ -43,7 +43,7 @@ $ terraform init -upgrade && terraform apply
 ```
 
 > [!IMPORTANT]
-> After a successful initial setup you should remove the `runner_webhook_config` output because it prints the webhook secret(s). Also make sure that the Terraform state file is stored in a safe place (e.g. in a [Cloud Storage bucket](https://cloud.google.com/docs/terraform/resource-management/store-state)). The state file contains the webhook secret as plaintext.
+> After a successful initial setup you should remove the `runner_webhook_config` output because it prints the webhook secret(s). Also make sure that the Terraform state file is stored in a safe place (e.g. in a private [Cloud Storage bucket](https://cloud.google.com/docs/terraform/resource-management/store-state)). The state file contains the webhook secret as plaintext.
 
 #### 2. Configure GitHub webhook
 
@@ -117,7 +117,7 @@ A single 1 h long workflow job in europe-west1 leads to the following cost:
 Ephemeral external IPv4 for Spot instance $0.0025
 Spot VM Instance c2d-highcpu-8            $0.0494
 Standard persistent disk 20 GiB used    ~ $0.0011
------------------------------------------------------
+-------------------------------------------------
                                           $0.053
 ```
 
@@ -125,18 +125,27 @@ Overall, only the compute instance accounts for the "majority" of the costs.
 
 ## How it works
 
-1. As soon as a new GitHub workflow job is queued, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/github-runner-autoscaler) with path `/webhook`
-2. The Cloud run validates the caller source (signature) and if valid enqueues a "create-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to start a VM instance takes about 1 minute.
-3. The Cloud task invokes the Cloud Run path `/create_vm`.
+1. As soon as a new GitHub workflow job signals a "queued" status, the GitHub webhook event "Workflow jobs" invokes the Cloud Run [container](https://github.com/Privatehive/gcp-hosted-github-runner/pkgs/container/github-runner-autoscaler) with path `/webhook`
+2. The Cloud Run validates the caller source (signature) and if valid enqueues a "create-vm" Cloud task callback with a short delay (defaults to 10 seconds).
+   * Edge Case for workflow jobs with a deployment review: if another GitHub webhook is received shortly afterwards indicating that the job status has been changed from "queued" to "waiting", the "create-vm" cloud task callback will be deleted (if it has not yet been processed). As soon as the deployment review for the workflow job is complete, we start again from the beginning.
+   * Edge Case for canceled workflow jobs: If a workflow job is immediately canceled a GitHub webhook signals a "completed" job status. The "create-vm" cloud task callback will be deleted (if it has not yet been processed)
+3. The Cloud task callback invokes the Cloud Run path `/create_vm`.
 4. Cloud Run creates a jit-config (using PAT from Secret Manager). The runner is then already registered (but marked as offline).
 5. The Cloud Run creates the VM instance from the instance template (preemtible spot VM instance by default) and provides it with the runner jit-config via custom metadata attribute.
 6. The runner starts working on the workflow job.
 7. As soon as the workflow job completed, the GitHub webhook event "Workflow jobs" invokes the Cloud Run again.
-8. The Cloud run validates the caller source (signature) and if valid enqueues a "delete-vm" Cloud task. This is necessary, because the timeout of a GitHub webhook is only 10 seconds but to delete a VM instance takes about 1 minute.
+8. The Cloud Run validates the caller source (signature) and if valid enqueues a "delete-vm" Cloud task.
 9.  The Cloud task invokes the Cloud Run path `/delete_vm`.
 10. The Cloud Run deletes the VM instance.
 
+> [!NOTE]
+> There are webhook related error cases that can lead to duplicate VMs or missing VMs. This happens, for example, if GitHub webhooks are received twice or if webhooks are missing or the received webhooks are in the wrong order. Such errors occur rarely but cannot be completely avoided.
+> To avoid unnecessary costs, any superfluous VM that does not pick a workflow job within one minute will stop (but not delete) itself.
+
 ## Troubleshooting
+
+> [!TIP]
+> If something does not work as expected have a look in the Logs of the github-runner-autoscaler Cloud Run.
 
 #### Public access to Cloud Run disallowed
 
@@ -151,13 +160,12 @@ Error applying IAM policy for cloudrun service "v1/projects/my-gcp-project-id/lo
 
 #### The VM instance stops shortly after it was created without processing a workflow task
 
-The VM will stop itself if the registration at the GitHub runner group fails. This can be caused by:
+The VM will stop (but not delete) itself if the registration at the GitHub runner group fails. This can be caused by:
 * A typo in the GitHub Enterprise, Organization, Repository name. Check the Terraform variables `github_enterprise`, `github_organization`, `github_repositories` for typos.
 * A not existing GitHub runner group within the Enterprise/Organization. Check the Terraform variable `github_runner_group` for typos.
-* The GitHub runner version is [deprecated](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners#controlling-runner-software-updates-on-self-hosted-runners). The GitHub runner won't accept any Workflow job. Check the Terraform variable `github_runner_download_url` and update to latest GitHub runner version.
-* An invalid jit-config.
+* The GitHub runner version is [deprecated](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/autoscaling-with-self-hosted-runners#controlling-runner-software-updates-on-self-hosted-runners). The GitHub runner won't accept any Workflow job. Check the Terraform variable `github_runner_download_url` and update to latest GitHub runner version or leave empty to always use the latest version.
 
-You can observer the runner registration process by connecting to the VM instance via SSH and running:
+You can observer the runner registration process by connecting to the VM instance via SSH (see `enable_ssh`) and running:
 ```
 $ sudo journalctl -u google-startup-scripts.service --follow
 ```
@@ -168,4 +176,4 @@ You exceeded your projects vCPU limit for the machine type in the region or for 
 
 #### Nothing happens at all
 
-Have a look in the Logs of the Cloud Run.
+The `github_runner_labels` don't match **all** the labels of the workflow job. Add the missing labels to your workflow job.

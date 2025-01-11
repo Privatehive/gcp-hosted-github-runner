@@ -2,8 +2,19 @@ name: "Build/Push github-runner-autoscaler Docker Image"
 on: push
 
 jobs:
+  extract_version:
+    name: "Extract autoscaler version"
+    runs-on: ubuntu-latest
+    outputs:
+      autoscaler_version: ${{ steps.extract_version.outputs.autoscaler_version }}
+    steps:
+      - name: "Clone repository"
+        uses: actions/checkout@v4
+      - name: "Write version to outputs"
+        run: echo autoscaler_version=$(grep -oP '(?<=autoscaler_version\s?=\s?")[^"]*' version.tf) >> "$GITHUB_OUTPUT"
   build_docker_image:
     name: "Build/Push Docker Image"
+    needs: extract_version
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -31,4 +42,5 @@ jobs:
           provenance: false
           tags: |
             ghcr.io/privatehive/github-runner-autoscaler:latest
+            ghcr.io/privatehive/github-runner-autoscaler:${{ needs.extract_version.outputs.autoscaler_version }}
             ghcr.io/privatehive/github-runner-autoscaler:${{ github.ref_name }}

@@ -82,6 +82,10 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         name  = "SOURCE_QUERY_PARAM_NAME"
         value = local.sourceQueryParamName
       }
+      env {
+        name  = "AUTOSCALER_VERSION"
+        value = local.autoscaler_version
+      }
       dynamic "env" {
         for_each = var.force_cloud_run_deployment ? [0] : []
         content {
