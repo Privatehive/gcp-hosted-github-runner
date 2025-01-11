@@ -6,11 +6,12 @@ jobs:
     name: "Extract autoscaler version"
     runs-on: ubuntu-latest
     outputs:
-      autoscaler_version: ${{ steps.extract_version.outputs.autoscaler_version }}
+      autoscaler_version: ${{ steps.extract.outputs.autoscaler_version }}
     steps:
       - name: "Clone repository"
         uses: actions/checkout@v4
       - name: "Write version to outputs"
+        id: extract
         run: |
           VERSION=$(grep -oP '(?<=autoscaler_version = ")[^"]*' version.tf)
           if [ -z "${VERSION}" ]; then exit 1; fi
