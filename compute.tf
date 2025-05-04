@@ -82,7 +82,7 @@ resource "google_compute_project_metadata_item" "startup_scripts_register_jit_ru
 #!/bin/bash
 agent_name=$(hostname)
 echo "Setup of agent '$agent_name' started"
-apt-get update && apt-get -y install docker.io docker-buildx curl jq ${local.github_runner_package_install}
+apt-get update && apt-get -y install docker.io docker-buildx curl sed jq ${local.github_runner_package_install}
 useradd -d /home/agent -u ${var.github_runner_uid} agent
 usermod -aG docker agent
 newgrp docker

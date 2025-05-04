@@ -523,6 +523,7 @@ const runner_script_wrapper = `
 #!/bin/bash
 val=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/attributes/%s" -H "Metadata-Flavor: Google")
 curl "http://metadata.google.internal/computeMetadata/v1/project/attributes/%s" -H "Metadata-Flavor: Google" > runner_startup.sh
+sed -i 's/\r$//' ./runner_startup.sh
 chmod +x ./runner_startup.sh
 ./runner_startup.sh $val
 rm runner_startup.sh
