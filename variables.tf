@@ -37,7 +37,7 @@ variable "machine_creation_delay" {
 variable "max_concurrency" {
   type        = number
   description = "The estimated maximum number of concurrent workflow jobs"
-  default     = 20
+  default     = 100
   validation {
     condition     = var.max_concurrency <= 1000 && var.max_concurrency > 0
     error_message = "The value must be between 0 < x <= 1000"

@@ -76,6 +76,17 @@ As soon as you start a GitHub workflow, which contains a job with `runs-on: self
 
 Have a look at the [variables.tf](./variables.tf) file how to further configure the Terraform module.
 
+This are the most common variables you may want to change:
+
+`max_concurrency`: Select a maximum number of parallel workflow jobs to be expected (add 10% overhead).
+
+`github_runner_labels`: One or multiple labels the runner will be tagged with
+
+`machine_type`: The VM instance machine type where the GitHub runner will run on by default (can be individually overwritten per workflow job, see [Magic Labels](#magic-labels))
+
+`disk_size_gb`: The size of the VM disk
+
+
 > [!TIP]
 > To find the cheapest VM machine_type use this [table](https://gcloud-compute.com/instances.html) and sort by Spot instance cost. But remember that the price varies depending on the region.
 
