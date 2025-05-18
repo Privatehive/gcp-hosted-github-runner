@@ -19,7 +19,7 @@ resource "google_cloud_tasks_queue" "autoscaler_tasks" {
   }
 
   rate_limits {
-    max_concurrent_dispatches = 1
-    max_dispatches_per_second = 1
+    max_concurrent_dispatches = var.max_concurrency
+    max_dispatches_per_second = var.max_concurrency
   }
 }

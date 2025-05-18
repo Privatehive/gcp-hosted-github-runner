@@ -22,7 +22,7 @@ resource "google_cloud_run_v2_service" "autoscaler" {
 
   template {
     service_account                  = google_service_account.autoscaler_sa.email
-    max_instance_request_concurrency = 20
+    max_instance_request_concurrency = var.max_concurrency
     timeout                          = "120s"
     scaling {
       min_instance_count = 0
@@ -45,6 +45,10 @@ resource "google_cloud_run_v2_service" "autoscaler" {
       env {
         name  = "TASK_QUEUE"
         value = google_cloud_tasks_queue.autoscaler_tasks.id
+      }
+      env {
+        name  = "CREATE_VM_DELAY"
+        value = var.machine_creation_delay
       }
       env {
         name  = "INSTANCE_TEMPLATE"
@@ -97,6 +101,13 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         for_each = var.enable_debug ? [0] : []
         content {
           name  = "DEBUG"
+          value = 1
+        }
+      }
+      dynamic "env" {
+        for_each = var.simulate ? [0] : []
+        content {
+          name  = "SIMULATE"
           value = 1
         }
       }

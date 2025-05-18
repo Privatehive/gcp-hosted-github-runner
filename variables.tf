@@ -28,6 +28,22 @@ variable "machine_preemtible" {
   default     = true
 }
 
+variable "machine_creation_delay" {
+  type        = number
+  description = "The creation of the VM instance is delayed by the specified number of seconds. Useful for skipping the VM creation if the workflow job is canceled by the user shortly after creation. Set the value to 0 for immediate creation with the disadvantage that VMs are created for workflow jobs that have been canceled."
+  default     = 10
+}
+
+variable "max_concurrency" {
+  type        = number
+  description = "The estimated maximum number of concurrent workflow jobs"
+  default     = 20
+  validation {
+    condition     = var.max_concurrency <= 1000 && var.max_concurrency > 0
+    error_message = "The value must be between 0 < x <= 1000"
+  }
+}
+
 variable "machine_timeout" {
   type        = number
   description = "The maximum time a VM may run. Pick a number that is well outside the expected runner job timeouts but small enough to prevent unnecessary cost if a webhook event was lost or was not processed."
@@ -112,6 +128,12 @@ variable "github_runner_packages" {
 
 variable "force_cloud_run_deployment" {
   type        = bool
-  description = "Use only for development. Each Terraform apply leads to a new revision of the cloud run."
+  description = "Use only for development: Each Terraform apply leads to a new revision of the cloud run."
+  default     = false
+}
+
+variable "simulate" {
+  type        = bool
+  description = "Use only for development: If enabled no VMs will be created/deleted."
   default     = false
 }

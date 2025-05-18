@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.21 AS build
+FROM --platform=$BUILDPLATFORM golang:1.24 AS build
 
 WORKDIR /build
 COPY ./go.mod ./

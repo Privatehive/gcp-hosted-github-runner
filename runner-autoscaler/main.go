@@ -78,6 +78,7 @@ func main() {
 		RegisteredSources: map[string]pkg.Source{},
 		SourceQueryParam:  getEnvDefault("SOURCE_QUERY_PARAM_NAME", "src"),
 		CreateVmDelay:     getEnvDefaultInt64("CREATE_VM_DELAY", 10),
+		Simulate:          getEnvDefaultInt64("SIMULATE", 0) == 1,
 	}
 
 	if enterpriseEnv := strings.Split(getEnvDefault("GITHUB_ENTERPRISE", ""), ";"); len(enterpriseEnv) == 2 {
@@ -125,6 +126,10 @@ func main() {
 		log.Warn("No workflow runner labels were provided. You should at least add the label \"self-hosted\"")
 	} else {
 		config.RunnerLabels = labels
+	}
+
+	if config.Simulate {
+		log.Warn("Simulation mode is active - no VMs will be created/deleted")
 	}
 
 	port, _ := strconv.Atoi(getEnvDefault("PORT", "8080"))

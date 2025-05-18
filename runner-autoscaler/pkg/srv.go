@@ -283,22 +283,28 @@ func (s *Autoscaler) GetInstanceState(ctx context.Context, instanceName string) 
 // blocking until instance started or failed to start
 func (s *Autoscaler) StartInstance(ctx context.Context, instanceName string) error {
 
-	log.Infof("About to start instance: %s", instanceName)
-	client := newComputeClient(ctx)
-	defer client.Close()
-	if res, err := client.Start(ctx, &computepb.StartInstanceRequest{
-		Project:  s.conf.ProjectId,
-		Zone:     s.conf.Zone,
-		Instance: instanceName,
-	}); err != nil {
-		log.Errorf("Could not start instance: %s - %s", instanceName, err.Error())
-		return err
+	if s.conf.Simulate {
+		log.Infof("(SIMULATE) About to start instance: %s", instanceName)
+		time.Sleep(1 * time.Minute)
+		log.Infof("(SIMULATE) Started instance: %s", instanceName)
 	} else {
-		if err := res.Wait(ctx); err != nil {
-			log.Errorf("Failed to wait for instance to start: %s", err.Error())
+		log.Infof("About to start instance: %s", instanceName)
+		client := newComputeClient(ctx)
+		defer client.Close()
+		if res, err := client.Start(ctx, &computepb.StartInstanceRequest{
+			Project:  s.conf.ProjectId,
+			Zone:     s.conf.Zone,
+			Instance: instanceName,
+		}); err != nil {
+			log.Errorf("Could not start instance: %s - %s", instanceName, err.Error())
 			return err
 		} else {
-			log.Infof("Started instance: %s", instanceName)
+			if err := res.Wait(ctx); err != nil {
+				log.Errorf("Failed to wait for instance to start: %s", err.Error())
+				return err
+			} else {
+				log.Infof("Started instance: %s", instanceName)
+			}
 		}
 	}
 	return nil
@@ -331,22 +337,28 @@ func (s *Autoscaler) StopInstance(ctx context.Context, instanceName string) erro
 // blocking until instance started or failed to start
 func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) error {
 
-	log.Debugf("About to delete instance: %s", instanceName)
-	client := newComputeClient(ctx)
-	defer client.Close()
-	if res, err := client.Delete(ctx, &computepb.DeleteInstanceRequest{
-		Project:  s.conf.ProjectId,
-		Zone:     s.conf.Zone,
-		Instance: instanceName,
-	}); err != nil {
-		log.Errorf("Could not delete instance: %s - %s", instanceName, err.Error())
-		return err
+	if s.conf.Simulate {
+		log.Debugf("(SIMULATE) About to delete instance: %s", instanceName)
+		time.Sleep(30 * time.Second)
+		log.Infof("(SIMULATE) Deleted instance: %s", instanceName)
 	} else {
-		if err := res.Wait(ctx); err != nil {
-			log.Errorf("Failed to wait for instance to be deleted: %s", err.Error())
+		log.Debugf("About to delete instance: %s", instanceName)
+		client := newComputeClient(ctx)
+		defer client.Close()
+		if res, err := client.Delete(ctx, &computepb.DeleteInstanceRequest{
+			Project:  s.conf.ProjectId,
+			Zone:     s.conf.Zone,
+			Instance: instanceName,
+		}); err != nil {
+			log.Errorf("Could not delete instance: %s - %s", instanceName, err.Error())
 			return err
 		} else {
-			log.Infof("Deleted instance: %s", instanceName)
+			if err := res.Wait(ctx); err != nil {
+				log.Errorf("Failed to wait for instance to be deleted: %s", err.Error())
+				return err
+			} else {
+				log.Infof("Deleted instance: %s", instanceName)
+			}
 		}
 	}
 	return nil
@@ -355,35 +367,41 @@ func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) er
 // blocking until instance started or failed to start
 func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceName string, machineType *string, metadata ...*computepb.Items) error {
 
-	log.Debugf("About to create instance %s from template", instanceName)
-	computeClient := newComputeClient(ctx)
-	defer computeClient.Close()
-
-	var machine *string = nil
-	if machineType != nil {
-		machine = proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", s.conf.Zone, *machineType))
-	}
-
-	if res, err := computeClient.Insert(ctx, &computepb.InsertInstanceRequest{
-		Project: s.conf.ProjectId,
-		Zone:    s.conf.Zone,
-		InstanceResource: &computepb.Instance{
-			Name:        proto.String(instanceName),
-			MachineType: machine,
-			Metadata: &computepb.Metadata{
-				Items: metadata,
-			},
-		},
-		SourceInstanceTemplate: &s.conf.InstanceTemplate,
-	}); err != nil {
-		log.Errorf("Could not create instance %s from template: %s - %s", instanceName, s.conf.InstanceTemplate, err.Error())
-		return err
+	if s.conf.Simulate {
+		log.Debugf("(SIMULATE) About to create instance %s from template", instanceName)
+		time.Sleep(1 * time.Minute)
+		log.Infof("(SIMULATE) Created instance from template: %s", instanceName)
 	} else {
-		if err := res.Wait(ctx); err != nil {
-			log.Errorf("Failed to wait for instance to be created from template: %s", err.Error())
+		log.Debugf("About to create instance %s from template", instanceName)
+		computeClient := newComputeClient(ctx)
+		defer computeClient.Close()
+
+		var machine *string = nil
+		if machineType != nil {
+			machine = proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", s.conf.Zone, *machineType))
+		}
+
+		if res, err := computeClient.Insert(ctx, &computepb.InsertInstanceRequest{
+			Project: s.conf.ProjectId,
+			Zone:    s.conf.Zone,
+			InstanceResource: &computepb.Instance{
+				Name:        proto.String(instanceName),
+				MachineType: machine,
+				Metadata: &computepb.Metadata{
+					Items: metadata,
+				},
+			},
+			SourceInstanceTemplate: &s.conf.InstanceTemplate,
+		}); err != nil {
+			log.Errorf("Could not create instance %s from template: %s - %s", instanceName, s.conf.InstanceTemplate, err.Error())
 			return err
 		} else {
-			log.Infof("Created instance from template: %s", instanceName)
+			if err := res.Wait(ctx); err != nil {
+				log.Errorf("Failed to wait for instance to be created from template: %s", err.Error())
+				return err
+			} else {
+				log.Infof("Created instance from template: %s", instanceName)
+			}
 		}
 	}
 	return nil
@@ -691,6 +709,7 @@ type AutoscalerConfig struct {
 	RegisteredSources map[string]Source
 	SourceQueryParam  string
 	CreateVmDelay     int64
+	Simulate          bool
 }
 
 type Autoscaler struct {
