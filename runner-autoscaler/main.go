@@ -70,6 +70,7 @@ func main() {
 		ProjectId:         mustGetEnv("PROJECT_ID"),
 		Zone:              mustGetEnv("ZONE"),
 		TaskQueue:         mustGetEnv("TASK_QUEUE"),
+		TaskTimeout:       getEnvDefaultInt64("TASK_DISPATCH_TIMEOUT", 180),
 		InstanceTemplate:  mustGetEnv("INSTANCE_TEMPLATE"),
 		SecretVersion:     mustGetEnv("SECRET_VERSION"),
 		RunnerPrefix:      getEnvDefault("RUNNER_PREFIX", "runner"),

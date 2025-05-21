@@ -334,7 +334,7 @@ func (s *Autoscaler) StopInstance(ctx context.Context, instanceName string) erro
 	return nil
 }
 
-// blocking until instance started or failed to start
+// blocking until the instance is deleted or the deletion fails
 func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) error {
 
 	if s.conf.Simulate {
@@ -483,8 +483,9 @@ func (s *Autoscaler) CreateCallbackTaskWithToken(ctx context.Context, url string
 	req := &taskspb.CreateTaskRequest{
 		Parent: s.conf.TaskQueue,
 		Task: &taskspb.Task{
+			// the timeout of the cloud task callback - must be greater the time it takes to start/delete the VM
 			DispatchDeadline: &durationpb.Duration{
-				Seconds: 120, // the timeout of the cloud task callback - must be greater the time it takes to start the VM
+				Seconds: s.conf.TaskTimeout + 5, // short buffer so cloud run timeout ends before cloud task timeout
 				Nanos:   0,
 			},
 			ScheduleTime: now,
@@ -701,6 +702,7 @@ type AutoscalerConfig struct {
 	ProjectId         string
 	Zone              string
 	TaskQueue         string
+	TaskTimeout       int64
 	InstanceTemplate  string
 	SecretVersion     string
 	RunnerPrefix      string

@@ -2,7 +2,7 @@
 
 #### Creates/Deletes VM instances depending on GitHub workflow jobs webhook events
 
-A webserver is listening for GitHub "Workflow jobs" webhook events. Depending on the workflow job, a VM instance will be either created or deleted. The [10 second timeout](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks#respond-within-10-seconds) of the GitHub webhook has to be worked around (10 sec are not enough to start VM instance) by using a Clout Task queue that calls the webserver back with an increased timeout of 120 seconds.
+A webserver is listening for GitHub "Workflow jobs" webhook events. Depending on the workflow job, a VM instance will be either created or deleted. The [10 second timeout](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks#respond-within-10-seconds) of the GitHub webhook has to be worked around (10 sec are not enough to start VM instance) by using a Clout Task queue that calls the webserver back with an increased timeout of 180 seconds (can be configured).
 
 ### Scaling rules
 
@@ -34,6 +34,7 @@ The scaler is configured via the following environment variables:
 | PROJECT_ID              | ""                                     | The Google Cloud Project Id.                                                                                                                                                                                                                        |
 | ZONE                    | ""                                     | The Google Cloud zone where the VM instance will be created.                                                                                                                                                                                        |
 | TASK_QUEUE              | ""                                     | The relative resource name of the Cloud Task queue.                                                                                                                                                                                                 |
+| TASK_DISPATCH_TIMEOUT   | "180"                                  | The timeout in seconds for the Cloud Task callback (should be longer than it takes to create/delete a VM instance)                                                                                                                                  |
 | CREATE_VM_DELAY         | "10"                                   | The delay in seconds to wait before the VM is created. Useful for skipping the VM creation if the workflow job is canceled by the user shortly afterwards.                                                                                          |
 | INSTANCE_TEMPLATE       | ""                                     | The relative resource name of the instance template from which the VM instance will be created.                                                                                                                                                     |
 | SECRET_VERSION          | ""                                     | The relative resource name of the secret version which contains the PAT or PAT classic.                                                                                                                                                             |

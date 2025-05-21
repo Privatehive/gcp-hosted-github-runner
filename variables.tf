@@ -50,6 +50,12 @@ variable "machine_timeout" {
   default     = 14400 // 4 h
 }
 
+variable "autoscaler_timeout" {
+  type        = number
+  description = "The timeout of the autoscaler in seconds. Should be greater than the time required to create/delete a VM instance."
+  default     = 180
+}
+
 variable "enable_ssh" {
   type        = bool
   description = "Enable SSH access to the VM instances."
