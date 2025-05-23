@@ -49,3 +49,10 @@ jobs:
             ghcr.io/privatehive/github-runner-autoscaler:latest
             ghcr.io/privatehive/github-runner-autoscaler:${{ needs.extract_version.outputs.autoscaler_version }}
             ghcr.io/privatehive/github-runner-autoscaler:${{ github.ref_name }}
+      - name: "Delete untagged Docker Images"
+        uses: actions/delete-package-versions@v5
+        with: 
+          package-name: ghcr.io/privatehive/github-runner-autoscaler
+          package-type: container
+          delete-only-untagged-versions: true
+          min-versions-to-keep: 0
