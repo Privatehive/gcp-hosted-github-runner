@@ -23,6 +23,7 @@ import (
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/gin-gonic/gin"
+	"github.com/googleapis/gax-go/v2/apierror"
 	log "github.com/sirupsen/logrus"
 	ginlogrus "github.com/toorop/gin-logrus"
 	"google.golang.org/protobuf/proto"
@@ -222,7 +223,7 @@ func RandStringRunes(n int) string {
 	return string(b)
 }
 
-func calcSigHex(secret []byte, data []byte) string {
+func CalcSigHex(secret []byte, data []byte) string {
 
 	sig := hmac.New(sha256.New, secret)
 	sig.Write(data)
@@ -239,14 +240,14 @@ func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, Source, error) {
 		} else {
 			if src, ok := ctx.GetQuery(s.conf.SourceQueryParam); ok {
 				if source, ok := s.conf.RegisteredSources[src]; ok {
-					if calcSignature := calcSigHex([]byte(source.Secret), body); calcSignature == signature[7:] {
+					if calcSignature := CalcSigHex([]byte(source.Secret), body); calcSignature == signature[7:] {
 						return body, source, nil
 					} else {
 						log.Warnf("%s signature did not match", ctx.RemoteIP())
 						return nil, Source{}, ctx.AbortWithError(http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 					}
 				} else {
-					log.Infof("Source with name %s not registered - ignoring", src)
+					log.Infof("Source with name '%s' not registered - ignoring", src)
 					ctx.Status(http.StatusOK) // not considered an error
 					return nil, Source{}, fmt.Errorf("unknown webhook source")
 				}
@@ -350,8 +351,13 @@ func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) er
 			Zone:     s.conf.Zone,
 			Instance: instanceName,
 		}); err != nil {
-			log.Errorf("Could not delete instance: %s - %s", instanceName, err.Error())
-			return err
+			if apiErr, ok := err.(*apierror.APIError); ok && apiErr.HTTPCode() == 404 {
+				// We ignore this error because the instance may no longer exist, as it may have been terminated prematurely
+				log.Infof("Instance already gone: %s", instanceName)
+			} else {
+				log.Errorf("Could not delete instance: %s - %s", instanceName, err.Error())
+				return err
+			}
 		} else {
 			if err := res.Wait(ctx); err != nil {
 				log.Errorf("Failed to wait for instance to be deleted: %s", err.Error())
@@ -494,7 +500,7 @@ func (s *Autoscaler) CreateCallbackTaskWithToken(ctx context.Context, url string
 					HttpMethod: taskspb.HttpMethod_POST,
 					Url:        url,
 					Headers: map[string]string{
-						SHA_HEADER: SHA_PREFIX + calcSigHex([]byte(secret), []byte(data)),
+						SHA_HEADER: SHA_PREFIX + CalcSigHex([]byte(secret), []byte(data)),
 					},
 				},
 			},

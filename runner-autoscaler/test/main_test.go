@@ -1,7 +1,9 @@
 package test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -26,6 +28,7 @@ const GIT_HUB_ORG = "Privatehive"
 const TEST_REPO = "Privatehive/runner-test"
 const TEST_REPO_KEY = "repository-" + TEST_REPO
 const SOURCE_QUERY_PARAM_NAME = "src"
+const PUBLIC_SECRET = "It's a Secret to Everybody"
 
 func init() {
 
@@ -46,7 +49,7 @@ func init() {
 			TEST_REPO_KEY: {
 				Name:       TEST_REPO,
 				SourceType: pkg.TypeRepository,
-				Secret:     "It's a Secret to Everybody",
+				Secret:     PUBLIC_SECRET,
 			},
 		},
 	})
@@ -109,4 +112,20 @@ func TestHasAllLabels(t *testing.T) {
 	assert.False(t, result)
 	assert.NotEmpty(t, missing)
 	assert.Len(t, missing, 1)
+}
+
+func TestDeleteNotExistingVM(t *testing.T) {
+
+	job := pkg.Job{
+		RunnerName: "non-existing-unit-test-runner",
+	}
+	jobData, _ := json.Marshal(job)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://127.0.0.1:%d/delete?%s=%s", PORT, SOURCE_QUERY_PARAM_NAME, url.QueryEscape(TEST_REPO_KEY)), bytes.NewReader(jobData))
+	req.Header.Add("x-hub-signature-256", "sha256="+pkg.CalcSigHex([]byte(PUBLIC_SECRET), jobData))
+	resp, err := http.DefaultClient.Do(req)
+	assert.Nil(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 200, resp.StatusCode)
 }
