@@ -68,6 +68,12 @@ variable "use_cloud_nat" {
   default     = false
 }
 
+variable "subnet_ip_cidr_range" {
+  type        = string
+  description = "CIDR range to assign to subnet VM instances launch in."
+  default     = "10.0.1.0/24"
+}
+
 variable "enable_debug" {
   type        = bool
   description = "Enable debug messages of github-runner-autoscaler Cloud Run (WARNING: secrets will be leaked in log files)."
