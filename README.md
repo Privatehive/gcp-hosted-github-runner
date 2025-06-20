@@ -96,7 +96,7 @@ This are the most common variables you may want to change:
 
 * Executed by unprivileged user with name `agent` with the default uid `10000` and gid `10000`. Can be changed with `github_runner_uid`.
 * Provides docker-daemon and docker-buildx by default. Additional packages can be installed with `github_runner_packages`.
-* Only works with images that are based on debian (rely on apt package manager). Runs image `ubuntu-minimal-2004-lts` by default. Change with `machine_image`.
+* Only works with images that are based on debian (rely on apt package manager). Runs image `ubuntu-minimal-2204-lts` by default. Change with `machine_image`.
 
 #### Magic Labels
 

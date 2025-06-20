@@ -19,7 +19,7 @@ variable "disk_size_gb" {
 variable "machine_image" {
   type        = string
   description = "The VM instance boot image (gcloud compute images list --filter ubuntu-os). Only Linux is supported!"
-  default     = "ubuntu-os-cloud/ubuntu-minimal-2004-lts"
+  default     = "ubuntu-os-cloud/ubuntu-minimal-2204-lts"
 }
 
 variable "machine_preemtible" {
