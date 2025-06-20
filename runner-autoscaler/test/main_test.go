@@ -37,7 +37,7 @@ func init() {
 		RouteCreateVm:    "/create",
 		RouteDeleteVm:    "/delete",
 		ProjectId:        PROJECT_ID,
-		Zone:             ZONE,
+		Zones:            []string{ZONE},
 		TaskQueue:        "projects/" + PROJECT_ID + "/locations/" + REGION + "/queues/autoscaler-callback-queue",
 		InstanceTemplate: "projects/" + PROJECT_ID + "/global/instanceTemplates/ephemeral-github-runner",
 		SecretVersion:    "projects/" + PROJECT_ID + "/secrets/github-pat-token/versions/latest",

@@ -39,8 +39,8 @@ resource "google_cloud_run_v2_service" "autoscaler" {
         value = local.projectId
       }
       env {
-        name  = "ZONE"
-        value = local.zone
+        name  = "ZONES"
+        value = join(",", local.zones)
       }
       env {
         name  = "TASK_QUEUE"

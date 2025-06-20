@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -230,6 +231,15 @@ func CalcSigHex(secret []byte, data []byte) string {
 	return hex.EncodeToString(sig.Sum(nil))
 }
 
+// depending on an arbitrary input string a zone is selected
+// the same input string leads to the same zone
+func (s *Autoscaler) PickRandomZone(seed string) string {
+
+	hash := sha256.Sum256([]byte(seed))
+	index := binary.BigEndian.Uint64(hash[:8]) % uint64(len(s.conf.Zones))
+	return s.conf.Zones[index]
+}
+
 // returns http body, "src" query, error
 func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, Source, error) {
 
@@ -262,6 +272,7 @@ func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, Source, error) {
 	}
 }
 
+/*
 func (s *Autoscaler) GetInstanceState(ctx context.Context, instanceName string) (State, error) {
 
 	client := newComputeClient(ctx)
@@ -334,6 +345,7 @@ func (s *Autoscaler) StopInstance(ctx context.Context, instanceName string) erro
 	}
 	return nil
 }
+*/
 
 // blocking until the instance is deleted or the deletion fails
 func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) error {
@@ -348,7 +360,7 @@ func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) er
 		defer client.Close()
 		if res, err := client.Delete(ctx, &computepb.DeleteInstanceRequest{
 			Project:  s.conf.ProjectId,
-			Zone:     s.conf.Zone,
+			Zone:     s.PickRandomZone(instanceName),
 			Instance: instanceName,
 		}); err != nil {
 			if apiErr, ok := err.(*apierror.APIError); ok && apiErr.HTTPCode() == 404 {
@@ -382,14 +394,15 @@ func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceNam
 		computeClient := newComputeClient(ctx)
 		defer computeClient.Close()
 
+		zone := s.PickRandomZone(instanceName)
 		var machine *string = nil
 		if machineType != nil {
-			machine = proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", s.conf.Zone, *machineType))
+			machine = proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", zone, *machineType))
 		}
 
 		if res, err := computeClient.Insert(ctx, &computepb.InsertInstanceRequest{
 			Project: s.conf.ProjectId,
-			Zone:    s.conf.Zone,
+			Zone:    zone,
 			InstanceResource: &computepb.Instance{
 				Name:        proto.String(instanceName),
 				MachineType: machine,
@@ -706,7 +719,7 @@ type AutoscalerConfig struct {
 	RouteCreateVm     string
 	RouteDeleteVm     string
 	ProjectId         string
-	Zone              string
+	Zones             []string
 	TaskQueue         string
 	TaskTimeout       int64
 	InstanceTemplate  string

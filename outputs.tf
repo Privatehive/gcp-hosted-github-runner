@@ -13,3 +13,8 @@ output "github_pat_secret_name" {
   value       = google_secret_manager_secret.github_pat_token.secret_id
   description = "The name of the secret in gcp Secret Manager where the GitHub Fine-grained personal access token (classic) has to be saved"
 }
+
+output "machine_zones" {
+  value       = local.zones
+  description = "The zones where VM instances will be created in"
+}

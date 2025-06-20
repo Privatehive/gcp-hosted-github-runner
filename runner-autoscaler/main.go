@@ -68,7 +68,7 @@ func main() {
 		RouteDeleteVm:     getEnvDefault("ROUTE_DELETE_VM", "/delete_vm"),
 		RouteCreateVm:     getEnvDefault("ROUTE_CREATE_VM", "/create_vm"),
 		ProjectId:         mustGetEnv("PROJECT_ID"),
-		Zone:              mustGetEnv("ZONE"),
+		Zones:             strings.Split(mustGetEnv("ZONES"), ","),
 		TaskQueue:         mustGetEnv("TASK_QUEUE"),
 		TaskTimeout:       getEnvDefaultInt64("TASK_DISPATCH_TIMEOUT", 180),
 		InstanceTemplate:  mustGetEnv("INSTANCE_TEMPLATE"),
