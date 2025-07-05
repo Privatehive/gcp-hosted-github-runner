@@ -62,12 +62,15 @@ resource "google_project_iam_custom_role" "read_secret_version" {
 
 // ---- autoscaler-sa roles member ----
 resource "google_project_iam_member" "manage_vm_instances_member" {
+
+  count = length(local.zones)
+
   project = local.projectId
   member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
   role    = google_project_iam_custom_role.manage_vm_instances.id
   condition {
-    title       = "VM instance administration with a fix prefix ${var.github_runner_prefix}"
-    expression  = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zone}/instances/${var.github_runner_prefix}-')"
+    title       = "VM instance administration with a fix prefix ${var.github_runner_prefix} in zone ${local.zones[count.index]}"
+    expression  = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zones[count.index]}/instances/${var.github_runner_prefix}-')"
   }
 }
 
@@ -103,12 +106,15 @@ resource "google_project_iam_member" "create_vm_from_instance_template_member" {
 }
 
 resource "google_project_iam_member" "create_disk_member" {
+
+  count = length(local.zones)
+
   project = local.projectId
   member  = "serviceAccount:${google_service_account.autoscaler_sa.email}"
   role    = google_project_iam_custom_role.create_disk.id
   condition {
-    title      = "Create disk with a fix prefix ${var.github_runner_prefix}"
-    expression = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zone}/disks/${var.github_runner_prefix}-')"
+    title      = "Create disk with a fix prefix ${var.github_runner_prefix} in zone ${local.zones[count.index]}"
+    expression = "resource.name.startsWith('projects/${local.projectId}/zones/${local.zones[count.index]}/disks/${var.github_runner_prefix}-')"
   }
 }
 

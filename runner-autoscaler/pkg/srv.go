@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -230,6 +231,15 @@ func CalcSigHex(secret []byte, data []byte) string {
 	return hex.EncodeToString(sig.Sum(nil))
 }
 
+// depending on an arbitrary input string a zone is selected
+// the same input string leads to the same zone
+func (s *Autoscaler) PickRandomZone(seed string) string {
+
+	hash := sha256.Sum256([]byte(seed))
+	index := binary.BigEndian.Uint64(hash[:8]) % uint64(len(s.conf.Zones))
+	return s.conf.Zones[index]
+}
+
 // returns http body, "src" query, error
 func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, Source, error) {
 
@@ -262,6 +272,7 @@ func (s *Autoscaler) verifySignature(ctx *gin.Context) ([]byte, Source, error) {
 	}
 }
 
+/*
 func (s *Autoscaler) GetInstanceState(ctx context.Context, instanceName string) (State, error) {
 
 	client := newComputeClient(ctx)
@@ -334,36 +345,40 @@ func (s *Autoscaler) StopInstance(ctx context.Context, instanceName string) erro
 	}
 	return nil
 }
+*/
 
 // blocking until the instance is deleted or the deletion fails
 func (s *Autoscaler) DeleteInstance(ctx context.Context, instanceName string) error {
 
 	if s.conf.Simulate {
-		log.Debugf("(SIMULATE) About to delete instance: %s", instanceName)
+		log.Debugf("(SIMULATE) About to delete instance %s", instanceName)
 		time.Sleep(30 * time.Second)
-		log.Infof("(SIMULATE) Deleted instance: %s", instanceName)
+		log.Infof("(SIMULATE) Deleted instance %s", instanceName)
 	} else {
-		log.Debugf("About to delete instance: %s", instanceName)
+
+		zone := s.PickRandomZone(instanceName)
+
+		log.Debugf("About to delete instance %s (%s)", instanceName, zone)
 		client := newComputeClient(ctx)
 		defer client.Close()
 		if res, err := client.Delete(ctx, &computepb.DeleteInstanceRequest{
 			Project:  s.conf.ProjectId,
-			Zone:     s.conf.Zone,
+			Zone:     zone,
 			Instance: instanceName,
 		}); err != nil {
 			if apiErr, ok := err.(*apierror.APIError); ok && apiErr.HTTPCode() == 404 {
 				// We ignore this error because the instance may no longer exist, as it may have been terminated prematurely
-				log.Infof("Instance already gone: %s", instanceName)
+				log.Infof("Instance %s (%s) already gone", instanceName, zone)
 			} else {
-				log.Errorf("Could not delete instance: %s - %s", instanceName, err.Error())
+				log.Errorf("Could not delete instance %s (%s): %s", instanceName, zone, err.Error())
 				return err
 			}
 		} else {
 			if err := res.Wait(ctx); err != nil {
-				log.Errorf("Failed to wait for instance to be deleted: %s", err.Error())
+				log.Errorf("Failed to wait for instance %s (%s) to be deleted: %s", instanceName, zone, err.Error())
 				return err
 			} else {
-				log.Infof("Deleted instance: %s", instanceName)
+				log.Infof("Deleted instance %s (%s)", instanceName, zone)
 			}
 		}
 	}
@@ -378,18 +393,21 @@ func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceNam
 		time.Sleep(1 * time.Minute)
 		log.Infof("(SIMULATE) Created instance from template: %s", instanceName)
 	} else {
-		log.Debugf("About to create instance %s from template", instanceName)
+
+		zone := s.PickRandomZone(instanceName)
+
+		log.Debugf("About to create instance %s (%s) from template", instanceName, zone)
 		computeClient := newComputeClient(ctx)
 		defer computeClient.Close()
 
 		var machine *string = nil
 		if machineType != nil {
-			machine = proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", s.conf.Zone, *machineType))
+			machine = proto.String(fmt.Sprintf("zones/%s/machineTypes/%s", zone, *machineType))
 		}
 
 		if res, err := computeClient.Insert(ctx, &computepb.InsertInstanceRequest{
 			Project: s.conf.ProjectId,
-			Zone:    s.conf.Zone,
+			Zone:    zone,
 			InstanceResource: &computepb.Instance{
 				Name:        proto.String(instanceName),
 				MachineType: machine,
@@ -399,14 +417,14 @@ func (s *Autoscaler) CreateInstanceFromTemplate(ctx context.Context, instanceNam
 			},
 			SourceInstanceTemplate: &s.conf.InstanceTemplate,
 		}); err != nil {
-			log.Errorf("Could not create instance %s from template: %s - %s", instanceName, s.conf.InstanceTemplate, err.Error())
+			log.Errorf("Could not create instance %s (%s) from template %s: %s", instanceName, zone, s.conf.InstanceTemplate, err.Error())
 			return err
 		} else {
 			if err := res.Wait(ctx); err != nil {
-				log.Errorf("Failed to wait for instance to be created from template: %s", err.Error())
+				log.Errorf("Failed to wait for instance %s (%s) to be created from template: %s", instanceName, zone, err.Error())
 				return err
 			} else {
-				log.Infof("Created instance from template: %s", instanceName)
+				log.Infof("Created instance %s (%s) from template", instanceName, zone)
 			}
 		}
 	}
@@ -706,7 +724,7 @@ type AutoscalerConfig struct {
 	RouteCreateVm     string
 	RouteDeleteVm     string
 	ProjectId         string
-	Zone              string
+	Zones             []string
 	TaskQueue         string
 	TaskTimeout       int64
 	InstanceTemplate  string

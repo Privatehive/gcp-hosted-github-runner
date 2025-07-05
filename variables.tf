@@ -50,6 +50,12 @@ variable "machine_timeout" {
   default     = 14400 // 4 h
 }
 
+variable "machine_zones" {
+  type        = list(string)
+  description = "One or multiple Google Cloud zones where the VM instances will be created in. The zone is selected at random for each instance."
+  default     = []
+}
+
 variable "autoscaler_timeout" {
   type        = number
   description = "The timeout of the autoscaler in seconds. Should be greater than the time required to create/delete a VM instance."
